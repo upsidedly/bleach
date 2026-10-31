@@ -44,7 +44,7 @@ enum CommandLineInterface {
                 else {
                     console.plan(report.plan, home: context.home)
                     console.note("\(report.projectsFound) projects · \(report.archivesMatched)/\(report.archivesCompared) ZIP pairs matched · \(report.verifiedArchiveFiles) archived files verified · \(report.installedInstallers) installers match installed apps")
-                    console.note("\(Display.bytes(report.plan.totalBytes)) allocated to review. Project source and expanded folders stay in place.")
+                    console.note("\(Display.bytes(report.plan.storage.privateBytes)) private bytes to review. Project source and expanded folders stay in place.")
                     if fromMenu { try await clean(plan: report.plan, arguments: arguments, console: console, engine: engine, context: context) }
                     else { console.note("Save with --output plan.json, then bleach apply plan.json to choose items.") }
                 }
@@ -69,14 +69,14 @@ enum CommandLineInterface {
                 else {
                     console.banner("Duplicates · \(report.groups.count) groups")
                     for group in report.groups {
-                        print("  \(console.strong(Display.bytes(group.bytesPerFile))) each · \(group.files.count) copies")
+                        print("  \(console.strong(Display.bytes(group.bytesPerFile))) logical each · \(group.files.count) copies")
                         for (index, file) in group.files.enumerated() {
                             print("  \(index == 0 ? console.success("keep") : "copy")  \(console.clean(Display.path(file, home: context.home)))")
                         }
                         print("")
                     }
                     console.note("\(report.filesHashed) files hashed out of \(report.filesInspected) inspected. Hard-link aliases and cloud files are excluded.")
-                    console.note("\(Display.bytes(report.plan.totalBytes)) allocated in extra copies; APFS clones may share these blocks.")
+                    console.note("\(Display.bytes(report.plan.storage.privateBytes)) private in extra copies · \(Display.bytes(report.plan.totalBytes)) allocated including shared blocks.")
                     if fromMenu { try await clean(plan: report.plan, arguments: arguments, console: console, engine: engine, context: context) }
                     else { console.note("Save with --output plan.json, then bleach apply plan.json to choose copies.") }
                 }
@@ -110,7 +110,7 @@ enum CommandLineInterface {
                     console.banner("Recovery")
                     if history.isEmpty { print("  No cleanup batches yet.\n") }
                     for batch in history {
-                        print("  \(console.strong(batch.shortID))  \(batch.createdAt.formatted(date: .abbreviated, time: .shortened))  \(Display.bytes(batch.heldBytes)) held · \(batch.recoverable.count) recoverable\(batch.problemCount > 0 ? " · \(batch.problemCount) need review" : "")")
+                        print("  \(console.strong(batch.shortID))  \(batch.createdAt.formatted(date: .abbreviated, time: .shortened))  \(Display.bytes(batch.heldBytes)) allocated · \(batch.recoverable.count) recoverable\(batch.problemCount > 0 ? " · \(batch.problemCount) need review" : "")")
                     }
                     print("")
                     console.note("bleach undo <batch> to restore · bleach empty <batch> to delete permanently")
@@ -262,7 +262,7 @@ enum CommandLineInterface {
       bleach scan                      Review caches, logs and installers
       bleach discover [folder]         Find project artifacts and verified expanded ZIPs
       bleach clean                     Choose items and move them to recovery
-      bleach analyze [folder]          Explore allocated and logical space
+      bleach analyze [folder]          Separate private, shared and logical space
       bleach duplicates [folder]       Find full-content duplicates (Downloads by default)
       bleach apps                      List installed applications
       bleach uninstall <app>           Review removal; personal app data stays by default

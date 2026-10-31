@@ -163,7 +163,7 @@ extension BleachEngine {
             try Task.checkCancellation()
             try policy.validate(candidate)
             let current = try FileWalker.completeSnapshot(candidate.path)
-            guard current == candidate.snapshot else { throw BleachError("Changed since preview; scan again: \(candidate.path)") }
+            guard current.matchesFileState(candidate.snapshot) else { throw BleachError("Changed since preview; scan again: \(candidate.path)") }
             guard current.root.device == vaultDevice else { throw BleachError("Recovery must be on the same volume: \(candidate.path)") }
             if candidate.rule == .duplicate {
                 try validateDuplicate(candidate, selected: Set(plan.candidates.map(\.path)), policy: policy)
@@ -199,7 +199,7 @@ extension BleachEngine {
                                                 runningOwners: context.runningOwners + freshOwners)
                 let currentPolicy = CleanupPolicy(context: currentContext, preferences: currentPreferences)
                 try currentPolicy.validate(candidate)
-                guard try FileWalker.completeSnapshot(candidate.path) == candidate.snapshot else {
+                guard try FileWalker.completeSnapshot(candidate.path).matchesFileState(candidate.snapshot) else {
                     throw BleachError("Changed since preview; retained in place.")
                 }
                 if candidate.rule == .duplicate {

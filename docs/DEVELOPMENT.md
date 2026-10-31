@@ -58,6 +58,14 @@ Interrupted pending moves are reconciled by source/destination identity. Remaini
 
 Use POSIX `realpath` for physical roots. Foundation rewrites `/private/var` to `/var` even when resolving symlinks; that spelling would conflict with descriptor-relative no-follow access. Preserve lexical paths for validation and refuse redirected cleanup ancestors.
 
+## Storage accounting
+
+`Storage.c` queries `ATTR_CMNEXT_PRIVATESIZE` and `ATTR_CMNEXT_EXT_FLAGS` using `getattrlist`, with no-follow semantics, returned-attribute validation and device/inode matching. The packed reply uses four-byte alignment. Unsupported or replaced metadata stays unverified. Never infer private bytes from `st_blocks`, or current sharing from the historical `EF_MAY_SHARE_BLOCKS` flag. See Apple's [`getattrlist` attribute definitions](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/attr.h) and [returned-attribute packing](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/vfs/vfs_attrlist.c); the installed SDK's `getattrlist(2)` manual documents the private-size semantics.
+
+Private, shared/snapshot-retained, hard-linked and unverified byte buckets sum to attributed allocation, after inode deduplication. Every multiply-linked regular file is conservatively excluded from private bytes, even if all names are in the scan. Shared totals are attributed references, not deduplicated extents. Neither total predicts volume free-space gain. The analyzer ranks by private bytes, then attributed allocation, then path.
+
+Storage estimates are separate from identity stamps and recursive fingerprints: another clone's changes must not invalidate an otherwise unchanged saved plan or recovery batch. Optional snapshot storage preserves schema-1 plan/journal decoding; missing estimates are unverified, never assumed private. `StorageTests` exercises real disposable APFS clones, partial writes, outside links, sparse/reference handling, stale sharing flags, ranking, shared cleanup/duplicate accounting and legacy plan restoration. No snapshot is created and no real user data is changed by those tests.
+
 ## State
 
 `~/Library/Application Support/Bleach/` is private (mode 700). Preferences store exclusions, project roots and the minimum log age (30 days by default). Earlier age values are clamped to 30 when read. Rebuildable caches are suggested at every age unless blocked or excluded. Recovery has one UUID folder per batch, private JSON manifests and UUID item slots. Journals are atomically replaced and synchronized. Reads do not create state folders or rewrite history. The same schema serves both interfaces.

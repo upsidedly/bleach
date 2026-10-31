@@ -58,6 +58,7 @@ int bl_walk(const char *root, BLVisitor visitor, void *context) {
             error = entry->fts_errno ? entry->fts_errno : EIO;
         } else {
             metadata(entry->fts_statp, &s);
+            bl_measure_storage(entry->fts_path, &s, &s.storage);
         }
         int action = visitor(entry->fts_path, &s, error, context);
         if (action == 1) { result = ECANCELED; break; }

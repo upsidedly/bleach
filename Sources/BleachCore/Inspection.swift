@@ -19,10 +19,12 @@ extension BleachEngine {
         func convert(_ entry: BLAnalysisEntry) -> DiskEntry {
             let path = String(cString: entry.path)
             return DiskEntry(path: path, name: String(path.split(separator: "/").last ?? ""),
-                isDirectory: entry.directory != 0, logicalBytes: entry.logical, allocatedBytes: entry.allocated, fileCount: Int(entry.files))
+                isDirectory: entry.directory != 0, logicalBytes: entry.logical, allocatedBytes: entry.allocated,
+                fileCount: Int(entry.files), storage: StorageUsage(entry.storage), isSymbolicLink: entry.symbolic_link != 0)
         }
         func ordered(_ lhs: DiskEntry, _ rhs: DiskEntry) -> Bool {
-            lhs.allocatedBytes == rhs.allocatedBytes ? lhs.path < rhs.path : lhs.allocatedBytes > rhs.allocatedBytes
+            if lhs.storage.privateBytes != rhs.storage.privateBytes { return lhs.storage.privateBytes > rhs.storage.privateBytes }
+            return lhs.allocatedBytes == rhs.allocatedBytes ? lhs.path < rhs.path : lhs.allocatedBytes > rhs.allocatedBytes
         }
         let entries = (0..<analysis.entry_count).compactMap { index in analysis.entries[index].map { convert($0.pointee) } }.sorted(by: ordered)
         let largest = (0..<analysis.largest_count).map { convert(analysis.largest[$0]) }.sorted(by: ordered)
@@ -32,7 +34,7 @@ extension BleachEngine {
         }
         return DiskReport(path: path, entries: entries, largestFiles: largest,
             logicalBytes: analysis.logical, allocatedBytes: analysis.allocated, fileCount: Int(analysis.files),
-            entryCount: Int(analysis.nodes), issues: issues, duration: Date().timeIntervalSince(start))
+            entryCount: Int(analysis.nodes), issues: issues, duration: Date().timeIntervalSince(start), storage: StorageUsage(analysis.storage))
     }
 
     public func duplicates(in url: URL, context: ScanContext, minimumSize: Int64 = 1) throws -> DuplicateReport {

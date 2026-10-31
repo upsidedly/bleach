@@ -48,21 +48,22 @@ static int issue(BLAnalysis *out, const char *path, int code) {
     out->issues[out->issue_count++] = (BLAnalysisIssue){copy, code}; return 0;
 }
 
-/* The heap root is the least useful current result: smaller, or for equal
-   allocation, a lexically later path. This gives deterministic tie handling. */
+/* Rank private storage first, with attributed allocation as a tie breaker. */
 static int worse(const BLAnalysisEntry *a, const BLAnalysisEntry *b) {
+    if (a->storage.private_bytes != b->storage.private_bytes)
+        return a->storage.private_bytes < b->storage.private_bytes;
     return a->allocated < b->allocated || (a->allocated == b->allocated && strcmp(a->path, b->path) > 0);
 }
 static void exchange(BLAnalysisEntry *a, BLAnalysisEntry *b) { BLAnalysisEntry copy = *a; *a = *b; *b = copy; }
-static int largest(BLAnalysis *out, size_t limit, const char *path, const struct stat *s) {
+static int largest(BLAnalysis *out, size_t limit, const char *path, const struct stat *s, const BLStorage *storage) {
     if (!limit) return 0;
     int64_t allocation = s->st_blocks * 512;
-    if (out->largest_count == limit &&
-        (allocation < out->largest[0].allocated ||
-         (allocation == out->largest[0].allocated && strcmp(path, out->largest[0].path) >= 0))) return 0;
+    BLAnalysisEntry value = {.path = (char *)path, .logical = s->st_size,
+        .allocated = allocation, .files = 1, .storage = *storage};
+    if (out->largest_count == limit && !worse(&out->largest[0], &value)) return 0;
     char *copy = strdup(path);
     if (!copy) return ENOMEM;
-    BLAnalysisEntry value = {copy, 0, s->st_size, allocation, 1};
+    value.path = copy;
     if (out->largest_count < limit) {
         size_t at = out->largest_count++;
         out->largest[at] = value;
@@ -136,6 +137,7 @@ int bl_analyze(const char *root, size_t limit, BLCancellation cancelled, void *c
             top = calloc(1, sizeof(*top));
             if (!top) { result = ENOMEM; break; }
             top->path = strdup(entry->fts_path); top->directory = S_ISDIR(s->st_mode);
+            top->symbolic_link = S_ISLNK(s->st_mode);
             if (!top->path) { free(top); result = ENOMEM; break; }
             BLAnalysisEntry **entries = realloc(out->entries, sizeof(*entries) * (out->entry_count + 1));
             if (!entries) { free(top->path); free(top); result = ENOMEM; break; }
@@ -150,12 +152,22 @@ int bl_analyze(const char *root, size_t limit, BLCancellation cancelled, void *c
         }
         if (unique) {
             int64_t allocation = s->st_blocks * 512;
+            BLStat metadata = {.device = (uint64_t)s->st_dev, .inode = s->st_ino,
+                .links = s->st_nlink, .allocated = allocation,
+                .type = S_ISREG(s->st_mode) ? 1 : S_ISDIR(s->st_mode) ? 2 : S_ISLNK(s->st_mode) ? 3 : 4};
+#ifdef SF_DATALESS
+            metadata.dataless = (s->st_flags & SF_DATALESS) != 0;
+#endif
+            BLStorage storage;
+            bl_measure_storage(entry->fts_path, &metadata, &storage);
+            bl_add_storage(&out->storage, &storage);
+            if (top) bl_add_storage(&top->storage, &storage);
             out->allocated += allocation;
             if (top) top->allocated += allocation;
             if (S_ISREG(s->st_mode)) {
                 out->files++; out->logical += s->st_size;
                 if (top) { top->files++; top->logical += s->st_size; }
-                result = largest(out, limit, entry->fts_path, s);
+                result = largest(out, limit, entry->fts_path, s, &storage);
                 if (result) break;
             }
         }

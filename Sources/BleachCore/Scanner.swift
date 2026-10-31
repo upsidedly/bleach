@@ -137,7 +137,10 @@ public actor BleachEngine {
                 if let issue { issues.append(issue) }
             }
         }
-        candidates.sort { $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes }
+        candidates.sort {
+            if $0.privateBytes != $1.privateBytes { return $0.privateBytes > $1.privateBytes }
+            return $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes
+        }
         return CleanupPlan(createdAt: context.now, home: context.home.path, origin: "scan", candidates: candidates,
             issues: issues.sorted { $0.path < $1.path }, duration: Date().timeIntervalSince(start), scannedEntries: scannedEntries)
     }

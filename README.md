@@ -13,13 +13,13 @@ Bleach reviews caches, logs, installers, build artifacts, apps and duplicate fil
 
 ## Clean up
 
-Open Bleach and choose **Scan Your Mac**. Scanning changes nothing. Rebuildable caches start selected, including recent caches and package-manager caches. The large number shows your selected allocation and updates as you select or deselect items. Installers, project artifacts and personal app data wait for your choice. Known running app caches are marked **In use** and stay unselected.
+Open Bleach and choose **Scan Your Mac**. Scanning changes nothing. Rebuildable caches start selected, including recent caches and package-manager caches. The large number shows private bytes in your selection and updates as you select or deselect items. Shared blocks appear separately. Installers, project artifacts and personal app data wait for your choice. Known running app caches are marked **In use** and stay unselected.
 
 On first use, macOS may ask to access Downloads while looking for installers. Respond to that system dialog to let the scan continue, or cancel the scan in Bleach.
 
 Select a row to see its path, size, why it was found and what removing it changes. **Review Cleanup…** shows the exact selection before moving it to **Recovery**.
 
-Recovery files still occupy disk space. Restore a batch to put its files back, or choose **Delete Permanently…** to free its allocation. Bleach never empties your Mac’s Trash. A recreated original path is kept alongside the recovery copy until you resolve the conflict.
+Recovery keeps files on disk. Restore a batch to put its files back, or choose **Delete Permanently…** to remove them. Blocks shared with another file or snapshot may remain. Bleach never empties your Mac’s Trash. A recreated original path is kept alongside the recovery copy until you resolve the conflict.
 
 ## Find more space
 
@@ -29,7 +29,7 @@ Choose **Find More Space** after a scan, or press **⇧⌘F**. It adds evidence-
 - **Already expanded ZIPs:** checks every supported archived file against its adjacent expanded folder with full SHA-256 and ZIP integrity checks. This finds redundant compressed copies that ordinary duplicate-file hashes miss.
 - **Already-installed app installers:** matches a ZIP app installer or an already-mounted DMG to an installed app by bundle ID, version and build. A matching filename is insufficient. Different versions remain unmarked; offline backups can still be worth keeping.
 
-These items start unchecked. The app reports the additional allocation separately and keeps the large number tied to your actual selection. Installed apps, project source and expanded folders stay in place. Archive contents and installed-app identity are rechecked before a cleanup moves anything.
+These items start unchecked. The app reports their private bytes separately and keeps the large number tied to your actual selection. Installed apps, project source and expanded folders stay in place. Archive contents and installed-app identity are rechecked before a cleanup moves anything.
 
 In the controlled coverage fixture, these methods found **220 MiB beyond the quick scan's 16 MiB**, including every expected item and none of the mismatched/unsafe/upgrade decoys. This is a constructed fixture, not a typical-Mac savings claim. See [discovery evidence, reproduction and format limits](docs/DISCOVERY.md).
 
@@ -42,7 +42,7 @@ bleach scan                              # Read-only cleanup review
 bleach discover                          # Find projects, expanded ZIPs and installed-app installers
 bleach discover ~/Projects --output more.json
 bleach clean                             # Choose items and confirm a recoverable cleanup
-bleach analyze ~/Downloads               # Explore disk allocation
+bleach analyze ~/Downloads               # Separate private and shared disk usage
 bleach duplicates ~/Documents            # Compare complete file contents
 bleach apps                              # List installed apps
 bleach uninstall /Applications/App.app -n # Preview app removal
@@ -67,13 +67,29 @@ Saved plans expire after 24 hours. Bleach rechecks file identity, recursive meta
 
 | View | What it does |
 | --- | --- |
-| Space | Sizes folders and lists large files. Drill into a folder or reveal a file in Finder. |
+| Space | Ranks folders and files by private disk usage, with shared allocation shown separately. Drill into a folder or reveal a file in Finder. |
 | Duplicates | Groups equal-length files by full SHA-256. Choose which copy to keep; review the extras before cleanup. |
 | Applications | Reviews a user-owned app and exact bundle-ID matches. Personal data is a separate choice; shared app-group data stays in place. |
 | Recovery | Shares cleanup batches between the CLI and app. Interrupted moves are reconciled from their journal. |
 | System | Shows measured CPU, memory, swap and disk availability. |
 
 Add project folders in **Settings**, or use `bleach config --add-project ~/Projects`. Bleach recognizes `node_modules`, `.build`, `target` and `.next` beside matching manifests. It keeps source files. Exclude a folder with `bleach protect <path>` or the item’s context menu; the exclusion applies to both interfaces.
+
+## APFS and references
+
+Bleach asks macOS for each file's private allocation (`ATTR_CMNEXT_PRIVATESIZE`) rather than treating `du`-style allocation as a savings estimate. The CLI and app use the same accounting:
+
+| Size | Meaning |
+| --- | --- |
+| Private | Bytes macOS reports as belonging only to that file, outside clones and snapshots. This drives the large number and Space ranking. |
+| Allocated | Blocks attributed to the files. APFS clones can each report the same shared blocks, so this total can exceed physical usage. |
+| Logical | File contents' length. Sparse files can have a large logical size with little allocation. |
+
+A fully shared APFS clone can show **2 MB allocated, 0 KB private**. A partially changed clone contributes only its private extents. Shared or snapshot-retained bytes are shown separately, including when the other clone is outside the scanned folder. Bleach does not search your whole disk for the other copy.
+
+Hard links are counted once and excluded from the private estimate. Symbolic links and Finder aliases never add their targets' contents; mounted volumes are not traversed. Unsupported or unavailable private-size metadata is labeled **unverified** and excluded from the private number. Older saved plans remain usable but their sizes are unverified until rescanned.
+
+Private bytes are a conservative per-file measure, not an exact folder footprint or promised free-space gain. Removing every copy in a clone or hard-link group may free more. Shared-byte totals can include repeated references to the same blocks. Allocation can change after scanning, and moving files to Recovery frees no space.
 
 ## Improvements over Mole CLI
 
@@ -83,7 +99,8 @@ Bleach builds on the workflows researched in [Mole](https://github.com/tw93/Mole
 - Exact saved previews that reject changed targets and newly excluded files.
 - Full-content duplicate review with a retained copy revalidated before cleanup.
 - Native tables, item explanations, keyboard commands and shared CLI/app state.
-- Faster read-only disk analysis on the measured fixtures; [timings, source revision, method and limits](docs/benchmarks/results.md) are recorded with the raw results.
+- APFS private/shared accounting across cleanup, duplicate review and folder analysis.
+- Read-only analysis [timings, source revision, method and limits](docs/benchmarks/results.md) are recorded with raw results. Those earlier allocation-only timings do not measure the added APFS metadata queries.
 
 Mole has a broader catalog of vendor-specific recipes and system maintenance. Bleach does not alter system services, strip signed apps, purge memory or promise a general Mac speedup. See the [research](docs/RESEARCH.md) for the comparison and sources.
 

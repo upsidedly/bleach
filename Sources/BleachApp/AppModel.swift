@@ -55,7 +55,7 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
     var search = ""
     var category: CleanupCategory?
     var showInspector = true
-    var sortOrder = [KeyPathComparator(\CleanupCandidate.allocatedBytes, order: .reverse)]
+    var sortOrder = [KeyPathComparator(\CleanupCandidate.privateBytes, order: .reverse)]
     var review: CleanupPlan?
     var lastBatch: RecoveryBatch?
     var batches: [RecoveryBatch] = []
@@ -99,9 +99,10 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         set { switch destination ?? .clean { case .duplicates: duplicateSelection = newValue; case .applications: uninstallSelection = newValue; default: selectedPaths = newValue } }
     }
     var selectedCandidates: [CleanupCandidate] { activePlan?.candidates.filter { activeSelection.contains($0.path) } ?? [] }
-    var selectedBytes: Int64 { selectedCandidates.reduce(0) { $0 + $1.allocatedBytes } }
+    var selectedStorage: StorageUsage { .sum(selectedCandidates.map(\.storage)) }
+    var selectedBytes: Int64 { selectedStorage.privateBytes }
     var discoveredCandidates: [CleanupCandidate] { plan?.candidates.filter { discoveredPaths.contains($0.path) } ?? [] }
-    var discoveredBytes: Int64 { discoveredCandidates.reduce(0) { $0 + $1.allocatedBytes } }
+    var discoveredBytes: Int64 { discoveredCandidates.reduce(0) { $0 + $1.privateBytes } }
     var visibleCandidates: [CleanupCandidate] {
         (plan?.candidates ?? []).filter { candidate in
             let matchesFilter = switch filter {
@@ -179,7 +180,10 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
             combined.duration = (plan?.duration ?? 0) + result.plan.duration
             combined.scannedEntries = (plan?.scannedEntries ?? 0) + result.plan.scannedEntries
             combined.issues = Array(Dictionary(grouping: combined.issues + result.plan.issues, by: \.id).compactMap { $0.value.first }).sorted { $0.path < $1.path }
-            combined.candidates.sort { $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes }
+            combined.candidates.sort {
+                if $0.privateBytes != $1.privateBytes { return $0.privateBytes > $1.privateBytes }
+                return $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes
+            }
             plan = combined; discovery = result
             lastBatch = nil; filter = .all; search = ""; category = nil
             if focusedCandidate == nil { focusedCandidate = combined.candidates.first?.path }

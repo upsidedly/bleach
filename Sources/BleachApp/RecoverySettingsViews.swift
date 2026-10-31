@@ -15,10 +15,10 @@ struct RecoveryView: View {
             VStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(Display.bytes(model.recoverableBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
-                    Text("in recovery").font(.subheadline).foregroundStyle(.secondary)
+                    Text("allocated in recovery").font(.subheadline).foregroundStyle(.secondary)
                     Spacer()
                 }.padding(.horizontal, 24).padding(.top, 24)
-                Text("These files still use disk space. Restore them or delete a batch permanently.")
+                Text("Recovery keeps these files on disk. Allocation can include shared blocks. Restore files or delete a batch permanently.")
                     .font(.subheadline).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24).padding(.top, 7).padding(.bottom, 22)
                 VSplitView {
@@ -29,7 +29,7 @@ struct RecoveryView: View {
                                 Text(batch.shortID).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }.padding(.vertical, 7)
                         }.width(min: 170, ideal: 220)
-                        TableColumn("Held") { Text(Display.bytes($0.heldBytes)).font(.subheadline).monospacedDigit() }.width(95)
+                        TableColumn("Allocated") { Text(Display.bytes($0.heldBytes)).font(.subheadline).monospacedDigit() }.width(95)
                         TableColumn("State") { batch in
                             Text(batch.problemCount > 0 ? "Needs review" : batch.recoverable.isEmpty ? "Finished" : "Recoverable")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -137,7 +137,7 @@ struct SystemView: View {
                     VStack(alignment: .leading, spacing: 15) {
                         metric("Disk available", value: sample.diskAvailable < 0 ? "Unavailable" : Display.bytes(sample.diskAvailable), detail: sample.diskTotal < 0 ? "" : "of \(Display.bytes(sample.diskTotal))")
                         if sample.diskTotal > 0 { ProgressView(value: Double(sample.diskTotal - sample.diskAvailable), total: Double(sample.diskTotal)).tint(.secondary).accessibilityLabel("Disk utilization") }
-                        Text("Recovery holds \(Display.bytes(model.recoverableBytes)). APFS snapshots and other apps can affect available space.").font(.caption).foregroundStyle(.secondary)
+                        Text("Recovery has \(Display.bytes(model.recoverableBytes)) of attributed allocation. Shared blocks and other apps can affect available space.").font(.caption).foregroundStyle(.secondary)
                     }
                     Text("Measured locally from macOS. No health score, memory purge or background optimizer.").font(.caption).foregroundStyle(.secondary)
                 } else { ProgressView("Reading system statistics…") }

@@ -29,13 +29,17 @@ struct CleanupView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(Display.bytes(model.selectedBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("selected").font(.subheadline.weight(.medium))
+                                Text("private selected").font(.subheadline.weight(.medium)).help(StorageUsage.explanation)
                                 Text("\(Display.items(model.selectedCandidates.count)) · \(Display.duration(plan.duration))").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                         }
+                        if !model.selectedStorage.details.isEmpty {
+                            Text("\(Display.bytes(model.selectedStorage.allocatedBytes)) allocated · \(model.selectedStorage.details)")
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(2).help(model.selectedStorage.details)
+                        }
                         if model.discovery != nil {
-                            Text("\(Display.bytes(model.discoveredBytes)) found with Find More Space · \(Display.items(model.discoveredCandidates.count)) to review")
+                            Text("\(Display.bytes(model.discoveredBytes)) private found with Find More Space · \(Display.items(model.discoveredCandidates.count)) to review")
                                 .font(.caption).foregroundStyle(.secondary)
                             if let result = model.discovery, result.installedInstallers > 0 {
                                 Text(result.installedInstallers == 1 ? "1 installer matches an app already installed" : "\(result.installedInstallers) installers match apps already installed")
@@ -148,8 +152,9 @@ struct CandidateTable: View {
                         Button("Exclude from Cleanup", systemImage: "hand.raised") { model.protect(candidate.path) }.disabled(model.isBusy)
                     }
             }.width(min: 140, ideal: 240)
-            TableColumn("Size", value: \.allocatedBytes) { candidate in
-                Text(Display.bytes(candidate.allocatedBytes)).monospacedDigit().font(.subheadline)
+            TableColumn("Private", value: \.privateBytes) { candidate in
+                Text(Display.bytes(candidate.privateBytes)).monospacedDigit().font(.subheadline)
+                    .help("\(Display.bytes(candidate.allocatedBytes)) allocated\(candidate.storage.details.isEmpty ? "" : " · " + candidate.storage.details)")
             }.width(min: 72, ideal: 82, max: 100)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
@@ -177,11 +182,15 @@ struct CandidateInspector: View {
                         Text(candidate.consequence).font(.subheadline).foregroundStyle(.secondary)
                     }
                     Grid(alignment: .leading, horizontalSpacing: 15, verticalSpacing: 11) {
+                        GridRow { Text("Private").foregroundStyle(.secondary); Text(Display.bytes(candidate.privateBytes)).monospacedDigit().help(StorageUsage.explanation) }
                         GridRow { Text("Allocated").foregroundStyle(.secondary); Text(Display.bytes(candidate.allocatedBytes)).monospacedDigit() }
                         GridRow { Text("Logical").foregroundStyle(.secondary); Text(Display.bytes(candidate.snapshot.logicalBytes)).monospacedDigit() }
                         GridRow { Text("Files").foregroundStyle(.secondary); Text(candidate.snapshot.fileCount.formatted()).monospacedDigit() }
                         GridRow { Text("Changed").foregroundStyle(.secondary); Text(Display.age(candidate.snapshot.newestModification)) }
                     }.font(.caption)
+                    if !candidate.storage.details.isEmpty {
+                        Text(candidate.storage.details).font(.caption).foregroundStyle(.secondary)
+                    }
                     if let proof = candidate.duplicateProof {
                         VStack(alignment: .leading, spacing: 8) {
                             Label("Copy kept", systemImage: "checkmark").font(.subheadline.weight(.medium))
@@ -218,10 +227,10 @@ struct ReviewSheet: View {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Move to recovery").font(.title2.weight(.semibold))
-                    Text("\(Display.items(plan.candidates.count)) · \(Display.bytes(plan.totalBytes)) allocated").font(.subheadline).foregroundStyle(.secondary)
+                    Text("\(Display.items(plan.candidates.count)) · \(Display.bytes(plan.storage.privateBytes)) private · \(Display.bytes(plan.totalBytes)) allocated").font(.subheadline).foregroundStyle(.secondary)
                 }
             }
-            Text("These files will leave their current locations. Restore them from Recovery, or permanently delete the batch there to free disk space.")
+            Text("These files will leave their current locations. Restore them from Recovery, or permanently delete the batch there. Moving files to recovery frees no space; shared blocks can remain after deletion.")
                 .font(.body).foregroundStyle(.secondary)
             List(plan.candidates) { candidate in
                 HStack {
@@ -230,7 +239,7 @@ struct ReviewSheet: View {
                         Text(Display.path(candidate.path, home: model.home)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer()
-                    Text(Display.bytes(candidate.allocatedBytes)).font(.subheadline).monospacedDigit()
+                    Text(Display.bytes(candidate.privateBytes)).font(.subheadline).monospacedDigit().help("Private bytes")
                 }.padding(.vertical, 5)
             }.listStyle(.inset).frame(minHeight: 140, idealHeight: 240, maxHeight: 320)
             Text("Bleach checks these files again before moving them. If an app recreates a path, restore keeps both copies and asks you to resolve it.")

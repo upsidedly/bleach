@@ -114,6 +114,7 @@ final class WalkAccumulator {
     var root: FileStamp?
     var logical: Int64 = 0
     var allocated: Int64 = 0
+    var storage = StorageUsage()
     var fileCount = 0
     var entryCount = 0
     var newest = Date.distantPast
@@ -133,7 +134,7 @@ final class WalkAccumulator {
         self.collect = collect; self.fingerprint = fingerprint; self.skip = skip
         self.deadline = deadline
     }
-    func visit(path: String, stamp: FileStamp, error: Int32) -> Int32 {
+    func visit(path: String, stamp: FileStamp, storage usage: StorageUsage, error: Int32) -> Int32 {
         if Task.isCancelled { wasCancelled = true; return 1 }
         if let deadline, Date() > deadline { timedOut = true; return 1 }
         if error != 0 {
@@ -163,6 +164,7 @@ final class WalkAccumulator {
         let countBytes = stamp.links <= 1 || stamp.kind == 2 || seen.insert(stamp.identity).inserted
         if countBytes {
             allocated += stamp.allocated
+            storage = .sum([storage, usage])
             if stamp.kind == 1 { logical += max(0, stamp.size); fileCount += 1 }
         }
         if collect { records.append((path, stamp)) }
@@ -188,7 +190,8 @@ enum FileWalker {
         let result = bl_walk(path, { rawPath, rawStamp, error, opaque in
             guard let rawPath, let rawStamp, let opaque else { return 1 }
             let state = Unmanaged<WalkAccumulator>.fromOpaque(opaque).takeUnretainedValue()
-            return state.visit(path: String(cString: rawPath), stamp: FileStamp(rawStamp.pointee), error: error)
+            return state.visit(path: String(cString: rawPath), stamp: FileStamp(rawStamp.pointee),
+                               storage: StorageUsage(rawStamp.pointee.storage), error: error)
         }, context)
         if accumulator.timedOut { throw BleachError("Scan time budget reached; incomplete target retained: \(path)") }
         if accumulator.wasCancelled || result == ECANCELED { throw CancellationError() }
@@ -201,7 +204,7 @@ enum FileWalker {
             logicalBytes: accumulator.logical, allocatedBytes: accumulator.allocated,
             fileCount: accumulator.fileCount, entryCount: accumulator.entryCount,
             newestModification: accumulator.newest, hasCloudPlaceholder: accumulator.hasCloud,
-            hasForeignOwner: accumulator.hasForeign, hasOtherVolume: accumulator.hasOtherVolume),
+            hasForeignOwner: accumulator.hasForeign, hasOtherVolume: accumulator.hasOtherVolume, storage: accumulator.storage),
             issues: accumulator.issues, records: accumulator.records)
     }
 

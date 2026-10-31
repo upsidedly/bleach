@@ -41,6 +41,16 @@ public struct TreeSnapshot: Codable, Equatable, Sendable {
     public var hasCloudPlaceholder: Bool
     public var hasForeignOwner: Bool
     public var hasOtherVolume: Bool
+    public var storage: StorageUsage? = nil
+    public var storageUsage: StorageUsage { storage ?? .unverified(allocatedBytes) }
+
+    /// Sharing can change outside this tree without changing any file in it.
+    /// Keep every original identity/content guard, excluding only this estimate.
+    func matchesFileState(_ other: TreeSnapshot) -> Bool {
+        var lhs = self, rhs = other
+        lhs.storage = nil; rhs.storage = nil
+        return lhs == rhs
+    }
 }
 
 public enum CleanupCategory: String, Codable, CaseIterable, Sendable, Identifiable {
@@ -135,6 +145,8 @@ public struct CleanupCandidate: Codable, Sendable, Identifiable {
     public var archiveProof: ArchiveProof?
     public var installerProof: InstallerProof?
     public var allocatedBytes: Int64 { snapshot.allocatedBytes }
+    public var storage: StorageUsage { snapshot.storageUsage }
+    public var privateBytes: Int64 { storage.privateBytes }
 }
 
 public struct ScanIssue: Codable, Sendable, Identifiable {
@@ -170,6 +182,8 @@ public struct CleanupPlan: Codable, Sendable, Identifiable {
     public var suggested: [CleanupCandidate] { candidates.filter { $0.recommendation == .suggested } }
     public var suggestedBytes: Int64 { suggested.reduce(0) { $0 + $1.allocatedBytes } }
     public var totalBytes: Int64 { candidates.reduce(0) { $0 + $1.allocatedBytes } }
+    public var storage: StorageUsage { .sum(candidates.map(\.storage)) }
+    public var suggestedPrivateBytes: Int64 { suggested.reduce(0) { $0 + $1.privateBytes } }
 
     public func selecting(_ paths: Set<String>) -> CleanupPlan {
         var copy = self
@@ -249,6 +263,8 @@ public struct DiskEntry: Codable, Sendable, Identifiable {
     public var logicalBytes: Int64
     public var allocatedBytes: Int64
     public var fileCount: Int
+    public var storage: StorageUsage
+    public var isSymbolicLink: Bool
 }
 
 public struct DiskReport: Codable, Sendable {
@@ -261,6 +277,7 @@ public struct DiskReport: Codable, Sendable {
     public var entryCount: Int
     public var issues: [ScanIssue]
     public var duration: Double
+    public var storage: StorageUsage
     public var complete: Bool { issues.isEmpty }
 }
 

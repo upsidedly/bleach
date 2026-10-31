@@ -39,15 +39,18 @@ struct Console {
             print("  \(strong(category.title))")
             for candidate in items {
                 let marker = candidate.recommendation == .suggested ? success("●") : candidate.recommendation == .blocked ? warning("–") : muted("○")
-                let size = Display.bytes(candidate.allocatedBytes).padding(toLength: 11, withPad: " ", startingAt: 0)
+                let size = Display.bytes(candidate.privateBytes).padding(toLength: 11, withPad: " ", startingAt: 0)
                 print("  \(marker) \(size) \(clean(candidate.title))  \(muted(Self.shortID(candidate.path)))")
                 print("                \(muted(clean(Display.path(candidate.path, home: home))))")
+                if !candidate.storage.details.isEmpty { note("              \(Display.bytes(candidate.allocatedBytes)) allocated · \(candidate.storage.details)") }
                 if let reason = candidate.blockedReason { print("                \(warning(clean(reason)))") }
                 if candidate.installerProof != nil { print("                \(muted(clean(candidate.reason)))") }
             }
             print("")
         }
-        print("  \(strong(Display.bytes(plan.suggestedBytes))) suggested · \(Display.bytes(plan.totalBytes)) allocated across all candidates")
+        print("  \(strong(Display.bytes(plan.suggestedPrivateBytes))) private bytes suggested · \(Display.bytes(plan.storage.privateBytes)) private across all candidates")
+        note("\(Display.bytes(plan.totalBytes)) allocated\(plan.storage.details.isEmpty ? "" : " · " + plan.storage.details)")
+        note("Sizes show private bytes. Shared, hard-linked and unverified allocation is excluded.")
         note("● Suggested   ○ Review   – In use")
         if !plan.issues.isEmpty {
             print("\n  \(warning("\(plan.issues.count) skipped or unavailable locations"))")
@@ -62,7 +65,7 @@ struct Console {
         let restored = batch.items.filter { $0.state == .restored }.count
         let erased = batch.items.filter { $0.state == .erased }.count
         if batch.movedCount > 0 {
-            print("  \(success("✓")) \(batch.movedCount) items moved to recovery · \(strong(Display.bytes(batch.heldBytes))) held")
+            print("  \(success("✓")) \(batch.movedCount) items moved to recovery · \(strong(Display.bytes(batch.heldBytes))) allocated")
             note("No space is freed while these files are kept for recovery.")
             print("\n  Restore       \(strong("bleach undo \(batch.shortID)"))")
             print("  Free space    \(strong("bleach empty \(batch.shortID)"))")
@@ -91,15 +94,17 @@ struct Console {
     func disk(_ report: DiskReport, home: URL) {
         banner("Space · \(Display.duration(report.duration))")
         print("  \(strong(clean(Display.path(report.path, home: home))))\n")
-        let maximum = max(1, report.entries.first?.allocatedBytes ?? 1)
+        let maximum = max(1, report.entries.first?.storage.privateBytes ?? 1)
         for entry in report.entries.prefix(30) {
-            let blocks = Int(Double(entry.allocatedBytes) / Double(maximum) * 20)
+            let blocks = Int(Double(entry.storage.privateBytes) / Double(maximum) * 20)
             let bar = String(repeating: "━", count: blocks).padding(toLength: 20, withPad: " ", startingAt: 0)
-            let size = Display.bytes(entry.allocatedBytes).padding(toLength: 11, withPad: " ", startingAt: 0)
-            print("  \(muted(bar))  \(size) \(entry.isDirectory ? "▸" : "·") \(clean(entry.name))")
+            let size = Display.bytes(entry.storage.privateBytes).padding(toLength: 11, withPad: " ", startingAt: 0)
+            print("  \(muted(bar))  \(size) \(entry.isSymbolicLink ? "↗" : entry.isDirectory ? "▸" : "·") \(clean(entry.name))")
+            if !entry.storage.details.isEmpty { note("                        \(Display.bytes(entry.allocatedBytes)) allocated · \(entry.storage.details)") }
         }
-        print("\n  \(strong(Display.bytes(report.allocatedBytes))) allocated · \(Display.bytes(report.logicalBytes)) logical · \(report.fileCount) files")
-        note("Physical allocation is an estimate; APFS clones and snapshots can share blocks.")
+        print("\n  \(strong(Display.bytes(report.storage.privateBytes))) private · \(Display.bytes(report.allocatedBytes)) allocated · \(Display.bytes(report.logicalBytes)) logical · \(report.fileCount) files")
+        if !report.storage.details.isEmpty { note(report.storage.details) }
+        note(StorageUsage.explanation)
         if !report.issues.isEmpty { note("Partial scan: \(report.issues.count) locations could not be read. Use --json for details.") }
         print("")
     }
@@ -188,20 +193,21 @@ extension Console {
         while true {
             var dimensions = winsize()
             _ = ioctl(STDOUT_FILENO, TIOCGWINSZ, &dimensions)
-            let pageSize = max(3, min(14, Int(dimensions.ws_row) - 17))
+            let pageSize = max(3, min(14, Int(dimensions.ws_row) - 18))
             let pageStart = (cursor / pageSize) * pageSize
-            let total = plan.candidates.filter { selected.contains($0.path) }.reduce(Int64(0)) { $0 + $1.allocatedBytes }
+            let total = plan.candidates.filter { selected.contains($0.path) }.reduce(Int64(0)) { $0 + $1.privateBytes }
             var screen = "\u{1B}[H\u{1B}[2J\n  \(strong("◩  bleach"))  \(muted("Review cleanup"))\n\n"
-            screen += "  \(strong(Display.bytes(total))) selected · \(selected.count) items\n"
-            screen += "  \(muted("Moves to recovery. Delete a batch later to free its disk space."))\n\n"
+            screen += "  \(strong(Display.bytes(total))) private selected · \(selected.count) items\n"
+            screen += "  \(muted("Recovery moves free no space. Shared blocks can remain after deletion."))\n\n"
             for index in pageStart..<min(plan.candidates.count, pageStart + pageSize) {
                 let candidate = plan.candidates[index]
                 let mark = candidate.recommendation == .blocked ? "–" : selected.contains(candidate.path) ? "●" : "○"
-                let line = "\(index == cursor ? "›" : " ") \(mark)  \(Display.bytes(candidate.allocatedBytes).padding(toLength: 10, withPad: " ", startingAt: 0)) \(clean(candidate.title))"
+                let line = "\(index == cursor ? "›" : " ") \(mark)  \(Display.bytes(candidate.privateBytes).padding(toLength: 10, withPad: " ", startingAt: 0)) \(clean(candidate.title))"
                 screen += "  \(index == cursor ? strong(line) : line)\n"
             }
             let focused = plan.candidates[cursor]
             screen += "\n  \(muted(clean(Display.path(focused.path, home: home))))\n"
+            screen += "  \(muted(clean("\(Display.bytes(focused.allocatedBytes)) allocated\(focused.storage.details.isEmpty ? "" : " · " + focused.storage.details)")))\n"
             screen += "  \(clean(focused.blockedReason ?? focused.reason))\n"
             screen += "  \(muted(clean(focused.consequence)))\n\n"
             screen += "  \(muted("↑ ↓ move   space select   a suggested   enter review   q cancel"))\n"

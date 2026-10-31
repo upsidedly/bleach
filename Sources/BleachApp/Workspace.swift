@@ -156,7 +156,8 @@ struct SelectionBar: View {
     var body: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(model.selectedCandidates.count) selected · \(Display.bytes(model.selectedBytes))")
+                Text("\(model.selectedCandidates.count) selected · \(Display.bytes(model.selectedBytes)) private")
+                    .help(StorageUsage.explanation)
                     .font(.subheadline.weight(.medium)).monospacedDigit()
                 Text("Recoverable until you delete the batch.").font(.caption).foregroundStyle(.secondary)
             }

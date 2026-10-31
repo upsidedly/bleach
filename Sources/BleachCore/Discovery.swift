@@ -100,7 +100,7 @@ extension BleachEngine {
                     guard amount <= limits.totalArchiveBytes - comparedBytes else { throw BleachError("Discovery expanded-byte budget reached") }
                     comparedBytes += amount
                 }
-                guard try FileWalker.completeSnapshot(pair.path) == snapshot else { throw BleachError("ZIP changed during discovery") }
+                guard try FileWalker.completeSnapshot(pair.path).matchesFileState(snapshot) else { throw BleachError("ZIP changed during discovery") }
                 candidates.append(CleanupCandidate(path: pair.path, title: pair.lastPathComponent,
                     category: .archives, rule: .expandedArchive,
                     reason: "All \(proof.fileCount) file contents match the expanded folder at \(proof.expandedPath), verified with full SHA-256. The folder stays.",
@@ -114,7 +114,7 @@ extension BleachEngine {
         let apps = try installedApps(context: context)
         var installedInstallers = 0
         func addInstaller(_ url: URL, snapshot: TreeSnapshot, proof: InstallerProof) throws {
-            guard try FileWalker.completeSnapshot(url.path) == snapshot else { throw BleachError("Installer changed during inspection") }
+            guard try FileWalker.completeSnapshot(url.path).matchesFileState(snapshot) else { throw BleachError("Installer changed during inspection") }
             let app = URL(fileURLWithPath: proof.installedPath).lastPathComponent
             let version = proof.version.isEmpty ? proof.build : proof.version
             candidates.append(CleanupCandidate(path: url.path, title: url.lastPathComponent,
@@ -149,7 +149,10 @@ extension BleachEngine {
             } catch is CancellationError { throw CancellationError() }
             catch { issue(context.homeURL("Downloads").path, error.localizedDescription) }
         }
-        candidates.sort { $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes }
+        candidates.sort {
+            if $0.privateBytes != $1.privateBytes { return $0.privateBytes > $1.privateBytes }
+            return $0.allocatedBytes == $1.allocatedBytes ? $0.path < $1.path : $0.allocatedBytes > $1.allocatedBytes
+        }
         let plan = CleanupPlan(createdAt: context.now, home: context.home.path, origin: "discover", candidates: candidates,
             issues: issues.sorted { $0.path < $1.path }, duration: Date().timeIntervalSince(start), scannedEntries: scannedEntries)
         return DiscoveryReport(plan: plan, roots: roots.sorted(), directoriesVisited: directories, projectsFound: projects.count,

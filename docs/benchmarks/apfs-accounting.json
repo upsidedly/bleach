@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-31",
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "hardware": "Mac16,8",
+  "method": "Release CLI analyze --json; one warm-up each, then seven runs in alternating order; warm filesystem cache; end-to-end launch and JSON output. Read-only, disposable APFS fixtures.",
+  "beforeCommit": "78bdc775ad7de24c851d2927605a4d12601c67a5",
+  "beforeSHA256": "1865acc436c3cf1753f388551d7eda79b8d415e7fa6a11888ac4fc90d944f681",
+  "afterSHA256": "c6801f4714415c9e3a74adcf96604453e9a28646d7b99a323600bba2c243861b",
+  "accountingSourceSHA256": {
+    "Sources/BleachFS/Analysis.c": "f7d2d86ee13c1f10b112e788f62f428c56d79472f6e936d1bed48a9a9b23afa5",
+    "Sources/BleachFS/Storage.c": "79dae2eae256f9640b6e2a7a9468feafa4004bfdfe52f4910bab76cd8dae3f86",
+    "Sources/BleachFS/BleachFS.c": "7e9df0793c1ce57a27e87c6599216ef7553ccd3439a14b93e98d4a25e64ec0b6",
+    "Sources/BleachFS/include/BleachFS.h": "119bfc9fc6cb667c264eceea85fecce712fbc7df15d2652b388643719a606bfd",
+    "Sources/BleachCore/Inspection.swift": "c12f821e50d33aeb6cce5207e1d2959802c4422b93a74230002f0c2bf8e56ad8",
+    "Sources/BleachCore/StorageUsage.swift": "4a3e71260ac206bbef50f97b9dbbc1773ba4732c16c0e8777c1f533bf926f493"
+  },
+  "cases": [
+    {
+      "fixture": "wide-independent-files",
+      "files": 6400,
+      "allocatedBytes": 26214400,
+      "storage": {
+        "cloneFiles": 0,
+        "hardLinkedBytes": 0,
+        "hardLinkedFiles": 0,
+        "privateBytes": 26214400,
+        "sharedBytes": 0,
+        "sharedFiles": 0,
+        "symbolicLinks": 0,
+        "unverifiedBytes": 0
+      },
+      "beforeMedianMs": 14.928958000382408,
+      "afterMedianMs": 37.79770899564028,
+      "runsMs": {
+        "before": [
+          16.063667004345916,
+          14.573125008610077,
+          15.934625000227243,
+          14.928958000382408,
+          14.878208996378817,
+          13.907249987823889,
+          16.141917003551498
+        ],
+        "after": [
+          39.15250000136439,
+          37.29566700349096,
+          37.79770899564028,
+          36.468833990511484,
+          39.48970900091808,
+          37.48070800793357,
+          40.495625013136305
+        ]
+      }
+    },
+    {
+      "fixture": "full-clone-only",
+      "files": 128,
+      "allocatedBytes": 268435456,
+      "storage": {
+        "cloneFiles": 128,
+        "hardLinkedBytes": 0,
+        "hardLinkedFiles": 0,
+        "privateBytes": 0,
+        "sharedBytes": 268435456,
+        "sharedFiles": 128,
+        "symbolicLinks": 0,
+        "unverifiedBytes": 0
+      },
+      "beforeMedianMs": 7.034624999505468,
+      "afterMedianMs": 7.947666003019549,
+      "runsMs": {
+        "before": [
+          7.051874999888241,
+          6.91062500118278,
+          7.086208002874628,
+          7.034624999505468,
+          7.017875002929941,
+          7.775000005494803,
+          6.375750002916902
+        ],
+        "after": [
+          8.244416996603832,
+          7.947666003019549,
+          7.966999997734092,
+          7.784208995872177,
+          9.023209000588395,
+          7.636041002115235,
+          7.927124999696389
+        ]
+      }
+    }
+  ],
+  "fixtureMethod": {
+    "wide-independent-files": "100 directories, each with 64 independently written 1,024-byte files. File (i,j) contains byte (i+j)%255 repeated 1,024 times.",
+    "full-clone-only": "128 clonefile() copies of a 2 MiB file retained outside the scanned root, with no partial writes."
+  }
+}

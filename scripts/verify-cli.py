@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise actual CLI contracts against a disposable home, never the real home."""
 import argparse
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -73,6 +74,33 @@ def main():
         space = run("analyze", str(root / "Documents"), "--json")
         assert space["fileCount"] == 2 and space["allocatedBytes"] > 0
         checked.append("read-only disk inventory JSON")
+        # Real copy-on-write clones, including an original outside the scan.
+        source = root / "Storage/retained-original"
+        source.parent.mkdir()
+        source.write_bytes(b"x" * (2 * 1024**2))
+        clone = root / "Storage/Space/clone"
+        clone.parent.mkdir()
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+        assert libc.clonefile(os.fsencode(source), os.fsencode(clone), 0) == 0, ctypes.get_errno()
+        space = run("analyze", str(clone.parent), "--json")
+        assert space["allocatedBytes"] == source.stat().st_blocks * 512
+        assert space["storage"]["privateBytes"] == 0
+        assert space["storage"]["sharedBytes"] == space["allocatedBytes"]
+        assert space["storage"]["cloneFiles"] == 1
+        assert space["storage"]["unverifiedBytes"] == 0
+        text = run("analyze", str(clone.parent), parse=False).stdout
+        assert "full APFS clone" in text and "private" in text and "shared" in text
+        checked.append("APFS clone outside scanned folder: private/shared JSON and text agree")
+        cache_clone = root / "Library/Caches/org.bleach.fixture.Clone/clone"
+        cache_clone.parent.mkdir()
+        assert libc.clonefile(os.fsencode(source), os.fsencode(cache_clone), 0) == 0, ctypes.get_errno()
+        clone_plan = run("scan", "--json")
+        candidate = next(item for item in clone_plan["candidates"] if item["path"] == str(cache_clone.parent))
+        assert candidate["recommendation"] == "suggested"
+        assert candidate["snapshot"]["storage"]["privateBytes"] == 0
+        assert candidate["snapshot"]["storage"]["sharedBytes"] == source.stat().st_blocks * 512
+        checked.append("shared cache remains selected without inflating private bytes")
         run("scan", "--output", str(plan_file), status=1, parse=False)
         assert json.loads(plan_file.read_text())["id"] == plan["id"]
         checked.append("preview export refuses an existing output file")

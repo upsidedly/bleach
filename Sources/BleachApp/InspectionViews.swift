@@ -16,8 +16,11 @@ struct SpaceView: View {
                         Button("Choose Folder…") { model.chooseFolder(title: "Explore disk space") { model.analyze($0) } }.disabled(model.isBusy)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Text(Display.bytes(report.allocatedBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
-                        Text("allocated · \(report.fileCount.formatted()) files").font(.subheadline).foregroundStyle(.secondary)
+                        Text(Display.bytes(report.storage.privateBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
+                        Text("private · \(report.fileCount.formatted()) files").font(.subheadline).foregroundStyle(.secondary).help(StorageUsage.explanation)
+                    }
+                    if !report.storage.details.isEmpty {
+                        Text(report.storage.details).font(.caption).foregroundStyle(.secondary).lineLimit(2).help(report.storage.details)
                     }
                     Picker("Display", selection: $showLargest) {
                         Text("Folders & Files").tag(false)
@@ -30,15 +33,19 @@ struct SpaceView: View {
                         else { model.reveal(entry.path) }
                     } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: entry.isDirectory ? "folder" : "doc").font(.title3.weight(.light)).foregroundStyle(.secondary).frame(width: 23).accessibilityHidden(true)
+                            Image(systemName: entry.isSymbolicLink ? "link" : entry.isDirectory ? "folder" : "doc").font(.title3.weight(.light)).foregroundStyle(.secondary).frame(width: 23).accessibilityHidden(true)
                             VStack(alignment: .leading, spacing: 7) {
                                 HStack {
                                     Text(entry.name).font(.subheadline.weight(.medium)).lineLimit(1)
                                     Spacer()
-                                    Text(Display.bytes(entry.allocatedBytes)).font(.subheadline).monospacedDigit()
+                                    Text(Display.bytes(entry.storage.privateBytes)).font(.subheadline).monospacedDigit().help("Private bytes")
                                 }
-                                ProgressView(value: Double(entry.allocatedBytes), total: Double(max(1, (showLargest ? report.largestFiles : report.entries).first?.allocatedBytes ?? 1)))
-                                    .tint(.secondary).accessibilityLabel("Relative allocated size")
+                                ProgressView(value: Double(entry.storage.privateBytes), total: Double(max(1, (showLargest ? report.largestFiles : report.entries).first?.storage.privateBytes ?? 1)))
+                                    .tint(.secondary).accessibilityLabel("Relative private size")
+                                if !entry.storage.details.isEmpty {
+                                    Text("\(Display.bytes(entry.allocatedBytes)) allocated · \(entry.storage.details)")
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(2).help(entry.storage.details)
+                                }
                                 if showLargest { Text(Display.path(entry.path, home: model.home)).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
                             }
                             if entry.isDirectory && !showLargest { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true) }
@@ -47,13 +54,13 @@ struct SpaceView: View {
                         .contextMenu { Button("Reveal in Finder") { model.reveal(entry.path) } }
                 }.listStyle(.inset(alternatesRowBackgrounds: false))
                 HStack {
-                    Text("\(Display.bytes(report.logicalBytes)) logical · \(Display.duration(report.duration))").font(.caption).foregroundStyle(.secondary)
+                    Text("\(Display.bytes(report.allocatedBytes)) allocated · \(Display.bytes(report.logicalBytes)) logical · \(Display.duration(report.duration))").font(.caption).foregroundStyle(.secondary).help(StorageUsage.explanation)
                     Spacer()
                     if !report.complete { Label("Partial scan · \(report.issues.count) skipped", systemImage: "exclamationmark.circle").font(.caption).foregroundStyle(.secondary).help(report.issues.map { "\($0.path): \($0.message)" }.joined(separator: "\n")) }
                 }.padding(.horizontal, 24).padding(.vertical, 14)
             }
         } else {
-            EmptyState(symbol: "chart.bar.xaxis", title: "See where it goes.", message: "Explore folders by their actual disk allocation. Drill down to the files taking up room.") {
+            EmptyState(symbol: "chart.bar.xaxis", title: "See where it goes.", message: "Find private disk usage, see which bytes are shared by APFS clones, and explore the largest files.") {
                 HStack {
                     Button("Choose Folder…") { model.chooseFolder(title: "Explore disk space") { model.analyze($0) } }
                     Button("Explore Home") { model.analyze(model.home) }.buttonStyle(.borderedProminent)
@@ -89,7 +96,7 @@ struct DuplicatesView: View {
                 } else {
                     List(selection: $model.focusedCandidate) {
                         ForEach(report.groups.filter { group in report.plan.candidates.contains { $0.duplicateProof?.sha256 == group.sha256 } }) { group in
-                            Section("\(Display.bytes(group.bytesPerFile)) each · \(group.files.count) identical copies") {
+                            Section("\(Display.bytes(group.bytesPerFile)) logical each · \(group.files.count) identical copies") {
                                 ForEach(group.files, id: \.self) { path in
                                     if path == group.files.first {
                                         HStack(spacing: 11) {
@@ -104,6 +111,8 @@ struct DuplicatesView: View {
                                                 .labelsHidden().toggleStyle(.checkbox).disabled(model.isBusy)
                                             duplicateLabel(path)
                                             Spacer()
+                                            Text("\(Display.bytes(candidate.privateBytes)) private").font(.caption).foregroundStyle(.secondary)
+                                                .help(candidate.storage.details.isEmpty ? StorageUsage.explanation : candidate.storage.details)
                                             Button("Keep This") { model.keepDuplicate(path) }.buttonStyle(.borderless).font(.caption).disabled(model.isBusy)
                                         }.padding(.vertical, 7).tag(path)
                                             .contextMenu { Button("Reveal in Finder") { model.reveal(path) } }

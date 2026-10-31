@@ -187,6 +187,8 @@ import Testing
         let report = try await engine.analyze(fixture.url("Space"))
         #expect(report.fileCount == 1)
         #expect(report.logicalBytes == 4096)
+        #expect(report.storage.symbolicLinks == 1)
+        #expect(report.entries.first { $0.name == "link" }?.isSymbolicLink == true)
         #expect(!report.largestFiles.contains { $0.path.contains("Documents") })
     }
 
