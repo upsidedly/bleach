@@ -87,6 +87,14 @@ Bleach builds on the workflows researched in [Mole](https://github.com/tw93/Mole
 
 Mole has a broader catalog of vendor-specific recipes and system maintenance. Bleach does not alter system services, strip signed apps, purge memory or promise a general Mac speedup. See the [research](docs/RESEARCH.md) for the comparison and sources.
 
+## Download
+
+Download the latest [release](https://github.com/upsidedly/bleach/releases/latest), open the `.dmg`, and drag **Bleach** into **Applications**. These builds are for Apple silicon Macs. Quit an older Bleach before replacing it.
+
+The app is locally signed and is not notarized. macOS may require first-launch approval in **System Settings → Privacy & Security**.
+
+The bundled CLI is at `/Applications/Bleach.app/Contents/MacOS/bleach`.
+
 ## Install from source
 
 Use macOS 14 or later with Swift 6 and the macOS SDK. From this folder:
@@ -97,7 +105,7 @@ open /Applications/Bleach.app
 ~/.local/bin/bleach
 ```
 
-Add `~/.local/bin` to your `PATH` to use `bleach` directly. Quit Bleach before updating. The installer signs locally and backs up an earlier app or unrelated CLI. There is no notarized download or published package yet.
+Add `~/.local/bin` to your `PATH` to use `bleach` directly. Quit Bleach before updating. The installer signs locally and backs up an earlier app or unrelated CLI.
 
 For a build without installation, run `./scripts/build.sh`. The outputs are `build/Bleach.app` and `build/bleach`.
 

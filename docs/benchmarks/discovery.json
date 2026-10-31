@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-29",
+  "date": "2026-10-31",
   "version": "bleach 0.2.0",
   "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
   "bleachSHA256": "1865acc436c3cf1753f388551d7eda79b8d415e7fa6a11888ac4fc90d944f681",
@@ -13,8 +13,8 @@
   "projectsFound": 3,
   "expandedArchives": 1,
   "installedAppInstallers": 1,
-  "quickScanSeconds": 0.024179935455322266,
-  "discoverySeconds": 0.03832805156707764,
+  "quickScanSeconds": 0.02213609218597412,
+  "discoverySeconds": 0.033521056175231934,
   "allExpectedFound": true,
   "allDecoysRetained": true,
   "allocatedInventoryMatches": true,
