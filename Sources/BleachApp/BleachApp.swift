@@ -1,0 +1,43 @@
+import AppKit
+import BleachCore
+import SwiftUI
+
+@main struct BleachApp: App {
+    @State private var model = AppModel()
+    init() {
+        NSApplication.shared.applicationIconImage = BleachIcon.image()
+        if let index = CommandLine.arguments.firstIndex(of: "--appearance"), index + 1 < CommandLine.arguments.count {
+            NSApplication.shared.appearance = NSAppearance(named: CommandLine.arguments[index + 1] == "dark" ? .darkAqua : .aqua)
+        }
+    }
+    var body: some Scene {
+        Window("Bleach", id: "main") { Workspace(model: model) }
+            .defaultSize(width: 1100, height: 740)
+            .windowToolbarStyle(.unifiedCompact)
+            .commands {
+                CommandGroup(replacing: .undoRedo) {
+                    Button("Undo Cleanup") { if let batch = model.latestRecoverable { model.restore(batch) } }
+                        .keyboardShortcut("z", modifiers: .command)
+                        .disabled(model.latestRecoverable == nil || model.isBusy)
+                }
+                CommandMenu("Cleanup") {
+                    Button("Scan Your Mac") { model.destination = .clean; model.scan() }.keyboardShortcut("r", modifiers: [.command, .shift]).disabled(model.isBusy)
+                    Button("Find More Space") { model.destination = .clean; model.findMoreSpace() }
+                        .keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model.isBusy)
+                    Button("Review Selection…") { model.showReview() }.keyboardShortcut(.return, modifiers: .command).disabled(model.selectedCandidates.isEmpty || model.isBusy)
+                    Divider()
+                    Button("Recovery") { model.destination = .recovery }.keyboardShortcut("2", modifiers: .command)
+                    Button("Clean up") { model.destination = .clean }.keyboardShortcut("1", modifiers: .command)
+                }
+                if model.fixtureMode {
+                    CommandMenu("Verification") {
+                        Button("Compact Window") { NSApp.keyWindow?.setContentSize(NSSize(width: 880, height: 580)) }
+                            .keyboardShortcut("0", modifiers: [.command, .shift])
+                        Button("Standard Window") { NSApp.keyWindow?.setContentSize(NSSize(width: 1100, height: 740)) }
+                            .keyboardShortcut("9", modifiers: [.command, .shift])
+                    }
+                }
+            }
+        Settings { SettingsView(model: model).tint(.primary) }
+    }
+}

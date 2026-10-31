@@ -1,0 +1,129 @@
+{
+  "date": "2026-10-29",
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "moleRevision": "a52876330b34705b488b3a7ef525cacc05d461df",
+  "bleachSHA256": "c0e732ad21a00be4267269772ac0e15e7be235cbad6e7686262ade94c5b21861",
+  "moleAnalyzeSHA256": "da0bd6c5328fd176db5206856eab3eda7e2f887b58e946c4439e5b739206566d",
+  "method": "Release binary end-to-end wall time, JSON stdout, one unmeasured warm-up each, alternating order, warm filesystem cache. No cleanup commands run.",
+  "runsPerCase": 7,
+  "cases": [
+    {
+      "name": "wide-small-files",
+      "expected": {
+        "uniqueFiles": 12288,
+        "logicalBytes": 100663296,
+        "allocatedBytes": 100663296
+      },
+      "bleach": {
+        "medianMs": 127.47275000037916,
+        "runsMs": [
+          128.8604999999734,
+          127.47275000037916,
+          131.60683299975062,
+          125.88062499980879,
+          127.37937500014596,
+          127.76008299988462,
+          127.19808300016666
+        ],
+        "files": 12288,
+        "allocatedBytes": 100663296
+      },
+      "mole": {
+        "medianMs": 78.54641699987042,
+        "runsMs": [
+          80.21000000007916,
+          78.52708300015365,
+          77.01083300025857,
+          79.2438339999535,
+          78.54641699987042,
+          79.03716700002406,
+          76.34533300006296
+        ],
+        "files": 12288,
+        "allocatedBytes": 100663296,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 0.6161820232138774
+    },
+    {
+      "name": "deep-small-files",
+      "expected": {
+        "uniqueFiles": 6144,
+        "logicalBytes": 25165824,
+        "allocatedBytes": 25165824
+      },
+      "bleach": {
+        "medianMs": 72.72624999995969,
+        "runsMs": [
+          89.26745899998423,
+          72.46445800001311,
+          77.99004099979356,
+          72.72624999995969,
+          71.55037500024264,
+          69.9523749999571,
+          73.39487500030373
+        ],
+        "files": 6144,
+        "allocatedBytes": 25165824
+      },
+      "mole": {
+        "medianMs": 55.21495800030607,
+        "runsMs": [
+          62.161249999917345,
+          55.267290999836405,
+          57.523000000401225,
+          54.140084000209754,
+          51.681250000001455,
+          55.21495800030607,
+          51.26779199963494
+        ],
+        "files": 6144,
+        "allocatedBytes": 25165824,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 0.7592163489845368
+    },
+    {
+      "name": "sparse-and-hardlinks",
+      "expected": {
+        "uniqueFiles": 33,
+        "logicalBytes": 1074790400,
+        "allocatedBytes": 1048576
+      },
+      "bleach": {
+        "medianMs": 8.160332999977982,
+        "runsMs": [
+          8.66641599986906,
+          8.648834000268835,
+          8.153958000093553,
+          8.139749999827472,
+          8.160332999977982,
+          8.404083000186802,
+          7.759042000088812
+        ],
+        "files": 33,
+        "allocatedBytes": 1048576
+      },
+      "mole": {
+        "medianMs": 53.31479099959324,
+        "runsMs": [
+          55.49295799983156,
+          54.916332999709994,
+          53.09712500002206,
+          53.25437500005137,
+          52.0761660000062,
+          53.31479099959324,
+          53.5757080001531
+        ],
+        "files": 35,
+        "allocatedBytes": 1048576,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 6.533408746890243
+    }
+  ]
+}

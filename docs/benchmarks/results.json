@@ -1,0 +1,139 @@
+{
+  "date": "2026-10-29",
+  "platform": "macOS-27.2-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "moleRevision": "a52876330b34705b488b3a7ef525cacc05d461df",
+  "hardware": {
+    "hw.model": "Mac16,8",
+    "hw.memsize": "25769803776",
+    "hw.ncpu": "12"
+  },
+  "moleBuild": {
+    "goVersion": "go1.26.10",
+    "vcsRevisionVerified": true,
+    "sourceModified": false
+  },
+  "bleachSHA256": "1865acc436c3cf1753f388551d7eda79b8d415e7fa6a11888ac4fc90d944f681",
+  "moleAnalyzeSHA256": "da0bd6c5328fd176db5206856eab3eda7e2f887b58e946c4439e5b739206566d",
+  "method": "Release binary end-to-end wall time, JSON stdout, one unmeasured warm-up each, alternating order, warm filesystem cache. No cleanup commands run.",
+  "runsPerCase": 7,
+  "cases": [
+    {
+      "name": "wide-small-files",
+      "expected": {
+        "uniqueFiles": 12288,
+        "logicalBytes": 100663296,
+        "allocatedBytes": 100663296
+      },
+      "bleach": {
+        "medianMs": 26.455375000296044,
+        "runsMs": [
+          28.404708000380197,
+          26.716250000390573,
+          26.780666999911773,
+          25.7897920000687,
+          25.796667000577145,
+          26.455375000296044,
+          25.975417000154266
+        ],
+        "files": 12288,
+        "allocatedBytes": 100663296
+      },
+      "mole": {
+        "medianMs": 81.21408299939503,
+        "runsMs": [
+          84.41391700034728,
+          80.95754100031627,
+          88.18550000069081,
+          79.59379199928662,
+          79.59995800047182,
+          85.23079099995812,
+          81.21408299939503
+        ],
+        "files": 12288,
+        "allocatedBytes": 100663296,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 3.0698518920441016
+    },
+    {
+      "name": "deep-small-files",
+      "expected": {
+        "uniqueFiles": 6144,
+        "logicalBytes": 25165824,
+        "allocatedBytes": 25165824
+      },
+      "bleach": {
+        "medianMs": 19.141875000059372,
+        "runsMs": [
+          17.888207999931183,
+          18.786833999911323,
+          19.141875000059372,
+          19.549417000234826,
+          18.59433300069213,
+          19.43775000017922,
+          19.91737499974988
+        ],
+        "files": 6144,
+        "allocatedBytes": 25165824
+      },
+      "mole": {
+        "medianMs": 54.5696669996687,
+        "runsMs": [
+          54.06795799990505,
+          54.1035420001208,
+          55.03520900037984,
+          54.5696669996687,
+          53.963750000548316,
+          57.44841700015968,
+          55.65816700072901
+        ],
+        "files": 6144,
+        "allocatedBytes": 25165824,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 2.8508005093283413
+    },
+    {
+      "name": "sparse-and-hardlinks",
+      "expected": {
+        "uniqueFiles": 33,
+        "logicalBytes": 1074790400,
+        "allocatedBytes": 1048576
+      },
+      "bleach": {
+        "medianMs": 8.476457999677223,
+        "runsMs": [
+          8.268707999377511,
+          8.150958999976865,
+          8.476457999677223,
+          7.7638749999096035,
+          8.625666999250825,
+          8.872166999935871,
+          8.57045799966727
+        ],
+        "files": 33,
+        "allocatedBytes": 1048576
+      },
+      "mole": {
+        "medianMs": 53.937333000249055,
+        "runsMs": [
+          53.694959000495146,
+          53.86300000009214,
+          54.22616600026231,
+          54.8325420004403,
+          53.937333000249055,
+          53.77141700046195,
+          54.177334000087285
+        ],
+        "files": 35,
+        "allocatedBytes": 1048576,
+        "scanStatus": "complete"
+      },
+      "sameAllocationAndComplete": true,
+      "ratioMoleOverBleach": 6.363192385581684
+    }
+  ]
+}
