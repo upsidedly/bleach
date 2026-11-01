@@ -4,6 +4,15 @@ import Darwin
 import Foundation
 
 extension FileStamp {
+    var nativeMetadata: BLStat {
+        var value = BLStat()
+        value.device = device; value.inode = inode; value.links = links
+        value.size = size; value.allocated = allocated; value.mode = mode; value.owner = owner; value.flags = flags
+        value.modified_sec = modifiedSeconds; value.modified_nsec = modifiedNanoseconds
+        value.changed_sec = changedSeconds; value.changed_nsec = changedNanoseconds
+        value.type = Int32(kind); value.dataless = dataless ? 1 : 0
+        return value
+    }
     init(_ s: BLStat) {
         device = s.device; inode = s.inode; links = s.links
         size = s.size; allocated = max(0, s.allocated)

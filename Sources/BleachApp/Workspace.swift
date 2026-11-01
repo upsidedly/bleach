@@ -17,6 +17,7 @@ struct Workspace: View {
                     switch model.destination ?? .clean {
                     case .clean: CleanupView(model: model)
                     case .space: SpaceView(model: model)
+                    case .growth: GrowthView(model: model)
                     case .duplicates: DuplicatesView(model: model)
                     case .applications: ApplicationsView(model: model)
                     case .recovery: RecoveryView(model: model)
@@ -40,7 +41,7 @@ struct Workspace: View {
                         Button("Refresh", systemImage: "arrow.clockwise") { model.refresh() }
                             .help("Refresh (⌘R)")
                             .keyboardShortcut("r", modifiers: .command)
-                            .disabled(model.isBusy)
+                            .disabled(model.isBusy || (model.destination == .growth && model.growthRoot == nil))
                     }
                 }
             }
@@ -64,6 +65,7 @@ struct Workspace: View {
             }
         }
         .sheet(item: $model.review) { preview in ReviewSheet(model: model, plan: preview).tint(.primary).accentColor(Color(nsColor: .labelColor)) }
+        .sheet(item: $model.sharingRequest) { preview in SharingReviewSheet(model: model, plan: preview).tint(.primary).accentColor(Color(nsColor: .labelColor)) }
         .alert("Couldn’t finish", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
         } message: { Text(model.errorMessage ?? "") }
@@ -90,7 +92,7 @@ struct Workspace: View {
             .padding(.horizontal, 19).padding(.top, 17).padding(.bottom, 20)
             List(selection: $model.destination) {
                 Section {
-                    ForEach([Destination.clean, .space, .duplicates, .applications]) { destination in
+                    ForEach([Destination.clean, .space, .growth, .duplicates, .applications]) { destination in
                         Label(destination.title, systemImage: destination.symbol).tag(destination)
                             .padding(.vertical, 3)
                     }
@@ -162,10 +164,21 @@ struct SelectionBar: View {
                 Text("Recoverable until you delete the batch.").font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            Button("Review Cleanup…") { model.showReview() }
+            Button { model.showReview() } label: { PrimaryButtonLabel(title: "Review Cleanup…") }
                 .buttonStyle(.borderedProminent).controlSize(.large)
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(model.selectedCandidates.isEmpty || model.isBusy)
         }.padding(.horizontal, 23).padding(.vertical, 15).background(.bar)
+    }
+}
+
+// macOS tints the bezel without tinting its title. Resolve both appearances
+// explicitly on the label while retaining the native button style and roles.
+struct PrimaryButtonLabel: View {
+    let title: String
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isEnabled) private var isEnabled
+    var body: some View {
+        Text(title).foregroundColor(isEnabled ? (colorScheme == .dark ? .black : .white) : .secondary)
     }
 }

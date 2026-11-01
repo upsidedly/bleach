@@ -36,6 +36,14 @@ enum CommandLineInterface {
                     try export(plan, arguments: arguments)
                     if arguments.has("json") { try console.json(plan) } else { console.plan(plan, home: context.home); console.note("bleach clean to choose items · --output plan.json to save an exact preview") }
                 } else { try await clean(plan: plan, arguments: arguments, console: console, engine: engine, context: context) }
+            case "inactive":
+                let plan = try await engine.inactiveProjects(in: arguments.positionals.first.map(arguments.url), context: context)
+                try export(plan, arguments: arguments)
+                if arguments.has("json") { try console.json(plan) }
+                else {
+                    console.plan(plan, home: context.home)
+                    console.note("Inactive dependencies only. Source, Git, lockfiles and chat context stay. Save with --output plan.json, then bleach apply plan.json.")
+                }
             case "discover":
                 if !arguments.has("json") { console.note("Finding project artifacts and verifying expanded ZIP contents…") }
                 let report = try await engine.discover(in: arguments.positionals.first.map(arguments.url), context: context)
@@ -48,11 +56,44 @@ enum CommandLineInterface {
                     if fromMenu { try await clean(plan: report.plan, arguments: arguments, console: console, engine: engine, context: context) }
                     else { console.note("Save with --output plan.json, then bleach apply plan.json to choose items.") }
                 }
+            case "share":
+                guard let raw = arguments.positionals.first else { throw BleachError("Usage: bleach share duplicates.json [--select path] [--dry-run | --yes]") }
+                var plan = try JSONCoding.decoder().decode(CleanupPlan.self, from: boundedRead(arguments.url(raw), limit: 64_000_000))
+                if let selectors = arguments.values["select"] {
+                    let paths = Set(selectors.map { arguments.url($0).path })
+                    guard paths.isSubset(of: Set(plan.candidates.map(\.path))) else { throw BleachError("A selected path is missing from this preview") }
+                    plan = plan.selecting(paths)
+                }
+                guard plan.origin == "duplicates", !plan.candidates.isEmpty,
+                      plan.candidates.allSatisfy({ StorageSharing.isGeneratedCapture($0.path) && $0.duplicateProof.map { StorageSharing.isGeneratedCapture($0.keeperPath) } == true }) else { throw BleachError("Select only generated Playwright captures from a duplicate preview") }
+                if arguments.has("dry-run") {
+                    if arguments.has("json") { try console.json(plan) } else { console.plan(plan, home: context.home); console.note("Dry run: paths and contents remain unchanged.") }
+                    return
+                }
+                guard try console.confirm("Share storage for \(plan.candidates.count) copies? Both paths and file contents stay. Verified originals are permanently erased from this specific Recovery batch.", yes: arguments.has("yes")) else { return }
+                let receipt = try await engine.shareDuplicateStorage(plan, context: context)
+                if arguments.has("json") { try console.json(receipt) }
+                else { console.receipt(receipt.batch); console.note("\(receipt.pathsPreserved) copy paths preserved using clones. Review Recovery if any original was retained.") }
+                if receipt.batch.problemCount > 0 { exit(2) }
             case "apply":
                 guard let path = arguments.positionals.first else { throw BleachError("Usage: bleach apply plan.json [--dry-run | --yes]") }
                 let data = try boundedRead(arguments.url(path), limit: 64_000_000)
                 let plan = try JSONCoding.decoder().decode(CleanupPlan.self, from: data)
                 try await clean(plan: plan, arguments: arguments, console: console, engine: engine, context: context, saved: true)
+            case "growth":
+                guard let raw = arguments.positionals.first else { throw BleachError("Usage: bleach growth <folder> [--record] [--json]") }
+                let report = try await engine.growth(in: arguments.url(raw), context: context, record: arguments.has("record"))
+                if arguments.has("json") { try console.json(report) }
+                else {
+                    console.banner("Growth · \(console.clean(Display.path(report.path, home: context.home)))")
+                    for entry in report.entries {
+                        let delta = entry.privateChange.map { ($0 >= 0 ? "+" : "−") + Display.bytes(abs($0)) } ?? "baseline"
+                        print("  \(console.clean(delta))  \(console.clean(Display.path(entry.path, home: context.home)))")
+                    }
+                    console.note("\(Display.bytes(report.availableOnVolume)) available on volume. Private changes can reflect sharing; they are not a free-space receipt.")
+                    console.note(report.recorded ? "Complete metadata baseline saved locally; at most 8 folders, 256 direct children each." : "Read-only comparison. Use --record to save the next baseline.")
+                    for issue in report.issues { console.note(issue.message) }
+                }
             case "analyze":
                 let path = arguments.positionals.first.map(arguments.url) ?? context.home
                 let limit = try arguments.integer("limit", default: 60, range: 0...1000)
@@ -262,6 +303,9 @@ enum CommandLineInterface {
       bleach scan                      Review caches, logs and installers
       bleach discover [folder]         Find project artifacts and verified expanded ZIPs
       bleach clean                     Choose items and move them to recovery
+      bleach inactive [folder]         Review old dependencies with locked reinstall recipes
+      bleach growth <folder> [--record] Compare private allocation; explicitly save metadata
+      bleach share duplicates.json     Keep capture paths using APFS clones; confirm erasure
       bleach analyze [folder]          Separate private, shared and logical space
       bleach duplicates [folder]       Find full-content duplicates (Downloads by default)
       bleach apps                      List installed applications
@@ -289,6 +333,7 @@ enum CommandLineInterface {
       --projects <folder>              Scan project artifacts; may be repeated
       --category <name>                Restrict scan/clean to a category
       --with-data                      Include exact app-data matches when uninstalling
+      --record                         Save a complete growth baseline (at most 8 folders)
       --keep <path>                    Choose the retained copy in a duplicate group
       --output <file>                  Export a plan from scan, duplicates or uninstall
       --root <home>                    Inspect a different user home (also for fixtures)

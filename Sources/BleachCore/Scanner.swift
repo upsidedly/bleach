@@ -66,6 +66,7 @@ public actor BleachEngine {
         }
         let known: [(String, String, RuleID, String)] = [
             (".npm/_cacache", "npm package cache", .npmCache, "npm will download packages again when needed."),
+            (".npm/_npx", "npx command cache", .npxCache, "npx will download these commands again. Running commands are retained."),
             (".cache/pip", "pip download cache", .pipCache, "pip will download packages again when needed."),
             (".gradle/caches", "Gradle caches", .gradleCache, "Gradle will download dependencies and rebuild caches."),
             (".cache/org.swift.swiftpm", "Swift package cache", .swiftPMCache, "Swift Package Manager will fetch packages again.")
@@ -73,6 +74,10 @@ public actor BleachEngine {
         for (relative, title, rule, consequence) in known where Files.exists(context.homeURL(relative).path) {
             seeds.append(CandidateSeed(path: context.homeURL(relative).path, title: title, category: .developer,
                 rule: rule, reason: "Downloaded package data; installed project dependencies are separate.", consequence: consequence, review: true))
+        }
+        if let cache = context.compilerCache, Files.exists(cache.path) {
+            seeds.append(CandidateSeed(path: cache.path, title: "Clang module cache", category: .developer, rule: .clangModuleCache,
+                reason: "Compiler-generated modules in this user's macOS cache directory.", consequence: "The next compiler run rebuilds these modules. Active compiler references are retained."))
         }
         try children("Downloads") { url in
             guard ["dmg", "pkg", "xip"].contains(url.pathExtension.lowercased()) else { return nil }
@@ -120,6 +125,7 @@ public actor BleachEngine {
                                 rule: seed.rule, reason: seed.reason, consequence: seed.consequence,
                                 recommendation: seed.rule.isRebuildableCache || (stale && !seed.review) ? .suggested : .review,
                                 snapshot: snapshot, ownerBundleID: seed.owner, applicationPath: seed.application)
+                            if seed.rule == .customBuildOutput { candidate.outputProjectPath = ProjectOutputs.nextProject(for: URL(fileURLWithPath: seed.path))?.path }
                             if !stale && !seed.rule.isRebuildableCache { candidate.reason += " Modified within the last \(days) days; review before choosing." }
                             if let busy = policy.busyReason(candidate) { candidate.recommendation = .blocked; candidate.blockedReason = busy }
                             guard policy.ruleMatches(candidate) else { return (nil, ScanIssue(path: seed.path, message: "Unrecognized cleanup boundary")) }
@@ -149,16 +155,27 @@ public actor BleachEngine {
         try Task.checkCancellation()
         guard depth <= 6, !Files.pathIsWithin(root.path, context.state.path),
               !root.pathComponents.contains(".git") else { return }
+        let outputs = ProjectOutputs.swiftOutputs(in: root)
+        for output in outputs {
+            seeds.append(CandidateSeed(path: output.path, title: "\(root.lastPathComponent) / Swift output", category: .builds, rule: .customBuildOutput,
+                reason: "Compiler output identified by a Swift package, target triple and build description.", consequence: "Rebuild when returning to the project. Package checkouts and packaged apps stay.", review: true))
+        }
         let ignored: Set<String> = [".git", ".hg", ".svn", ".venv", "venv", "Pods", "vendor", ".swiftpm", ".Trash", "Library", "build", "dist"]
         for child in try Files.children(root.path) {
             let name = child.lastPathComponent
             guard let stat = try? Files.stamp(child.path), stat.kind == 2, !stat.dataless else { continue }
             if ["node_modules", ".build", "target", ".next"].contains(name) {
+                if name == ".build", outputs.contains(where: { Files.pathIsWithin($0.path, child.path) }) { continue }
                 guard CleanupPolicy.projectArtifactMatches(child) else { continue }
                 seeds.append(CandidateSeed(path: child.path,
                     title: "\(root.lastPathComponent) / \(name)", category: .builds, rule: .projectArtifact,
                     reason: "Generated dependencies or build output beside a matching project manifest.",
                     consequence: "Reinstall dependencies or rebuild before running this project again.", review: true))
+                continue
+            }
+            if ProjectOutputs.nextProject(for: child) != nil {
+                seeds.append(CandidateSeed(path: child.path, title: "\(root.lastPathComponent) / \(name)", category: .builds, rule: .customBuildOutput,
+                    reason: "Custom Next.js build output identified by its manifests and server/static layout.", consequence: "Rebuild this output before serving it. Source stays.", review: true))
                 continue
             }
             if ignored.contains(name) || name.hasPrefix(".") { continue }

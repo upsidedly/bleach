@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <copyfile.h>
+#include <sys/clonefile.h>
 
 static void metadata(const struct stat *s, BLStat *out) {
     memset(out, 0, sizeof(*out));
@@ -118,6 +120,43 @@ int bl_open_regular(const char *path, uint64_t device, uint64_t inode) {
         close(fd); errno = ESTALE; return -1;
     }
     return fd;
+}
+
+static int unchanged_regular(int fd, const BLStat *expected) {
+    BLStat actual;
+    if (bl_stat_fd(fd, &actual)) return 0;
+    return actual.device == expected->device && actual.inode == expected->inode &&
+        actual.type == 1 && actual.links == 1 && actual.owner == getuid() && !actual.dataless &&
+        actual.flags == 0 && actual.size == expected->size && actual.mode == expected->mode &&
+        actual.modified_sec == expected->modified_sec && actual.modified_nsec == expected->modified_nsec &&
+        actual.changed_sec == expected->changed_sec && actual.changed_nsec == expected->changed_nsec;
+}
+
+/* Destination is exclusive and every parent is opened without following links.
+   On any failure the recovery original remains; never unlink user paths here. */
+int bl_clone_copy(const char *keeper, const BLStat *keeper_stat, const char *metadata_source, const BLStat *metadata_stat, const char *destination) {
+    int source = bl_open_regular(keeper, keeper_stat->device, keeper_stat->inode);
+    if (source < 0) return errno;
+    int original = bl_open_regular(metadata_source, metadata_stat->device, metadata_stat->inode);
+    if (original < 0) { int e = errno; close(source); return e; }
+    char *name = NULL;
+    int directory = parent(destination, &name);
+    int result = directory < 0 ? errno : 0;
+    if (!result && (!unchanged_regular(source, keeper_stat) || !unchanged_regular(original, metadata_stat))) result = ESTALE;
+    if (!result && fclonefileat(source, directory, name, 0) < 0) result = errno;
+    int replacement = -1;
+    if (!result) {
+        replacement = openat(directory, name, O_RDWR | O_NOFOLLOW | O_CLOEXEC);
+        if (replacement < 0) result = errno;
+    }
+    if (!result && fcopyfile(original, replacement, NULL, COPYFILE_METADATA) < 0) result = errno;
+    if (!result && (!unchanged_regular(source, keeper_stat) || !unchanged_regular(original, metadata_stat))) result = ESTALE;
+    if (!result && fsync(replacement) < 0) result = errno;
+    if (!result && fsync(directory) < 0 && errno != EINVAL) result = errno;
+    if (replacement >= 0) close(replacement);
+    if (directory >= 0) close(directory);
+    free(name); close(original); close(source);
+    return result;
 }
 
 int bl_make_directories(const char *path) {

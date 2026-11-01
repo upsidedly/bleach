@@ -19,7 +19,7 @@ struct CleanupPolicy {
               !path.contains("\0"), path != "/", path != context.home.path else {
             throw BleachError("Invalid cleanup path: \(Display.terminalSafe(path))")
         }
-        guard Files.pathIsWithin(path, context.home.path) || candidate.rule == .application else {
+        guard Files.pathIsWithin(path, context.home.path) || candidate.rule == .application || (candidate.rule == .clangModuleCache && path == context.compilerCache?.path) else {
             throw BleachError("Cleanup path is outside this home: \(path)")
         }
         if let reason = exclusionReason(path) { throw BleachError("\(reason): \(path)") }
@@ -29,6 +29,7 @@ struct CleanupPolicy {
             throw BleachError("Linked, cloud-only, special or foreign-owned target retained: \(path)")
         }
         guard ruleMatches(candidate) else { throw BleachError("Path does not match its cleanup rule: \(path)") }
+        if candidate.rule == .inactiveDependencies { try ProjectReview.validate(candidate, policy: self) }
         if let busy = busyReason(candidate) { throw BleachError(busy + ": " + path) }
     }
 
@@ -50,6 +51,20 @@ struct CleanupPolicy {
         case .pipCache: return relative == "Library/Caches/pip" || relative == ".cache/pip"
         case .gradleCache: return relative == ".gradle/caches"
         case .swiftPMCache: return relative == ".cache/org.swift.swiftpm"
+        case .clangModuleCache: return candidate.path == context.compilerCache?.path
+        case .npxCache: return relative == ".npm/_npx"
+        case .inactiveDependencies:
+            guard Files.pathIsWithin(parent, context.home.path), !protectedUserPath(parent),
+                  ["node_modules", ".venv", "venv"].contains(name), candidate.projectEvidence != nil else { return false }
+            return restoring || (try? ProjectReview.recipe(url)) != nil
+        case .customBuildOutput:
+            if let project = ProjectOutputs.swiftProject(for: url, requireContents: !restoring) {
+                return Files.pathIsWithin(project.path, context.home.path) && !protectedUserPath(project.path)
+            }
+            guard let project = candidate.outputProjectPath, Files.pathIsWithin(project, context.home.path),
+                  Files.pathIsWithin(parent, project), !protectedUserPath(parent), !protectedUserPath(project),
+                  ProjectOutputs.regular(URL(fileURLWithPath: project).appendingPathComponent("package.json")) else { return false }
+            return restoring || ProjectOutputs.nextProject(for: url)?.path == project
         case .projectArtifact:
             guard Files.pathIsWithin(parent, context.home.path), !protectedUserPath(parent) else { return false }
             return Self.projectArtifactMatches(url)
@@ -82,6 +97,10 @@ struct CleanupPolicy {
     }
 
     func busyReason(_ candidate: CleanupCandidate) -> String? {
+        if [.clangModuleCache, .npxCache, .customBuildOutput].contains(candidate.rule) {
+            do { try ProjectReview.requireIdle(candidate.path, includeWorkingDirectory: true) }
+            catch { return error.localizedDescription }
+        }
         let name = URL(fileURLWithPath: candidate.path).lastPathComponent
         let inferred = candidate.rule == .userCache || candidate.rule == .log ? name : candidate.ownerBundleID
         for owner in context.runningOwners {
@@ -98,7 +117,7 @@ struct CleanupPolicy {
     }
 
     func protectedUserPath(_ path: String) -> Bool {
-        let protected = ["Library", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", ".codex", ".claude", ".local", ".Trash"]
+        let protected = ["Library", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config", ".codex", ".t3", ".claude", ".local", ".Trash"]
         if protected.contains(where: { Files.pathIsWithin(path, context.homeURL($0).path) }) { return true }
         let components = URL(fileURLWithPath: path).pathComponents
         return components.contains(where: { component in

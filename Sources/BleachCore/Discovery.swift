@@ -43,6 +43,15 @@ extension BleachEngine {
                   stamp.owner == getuid(), stamp.device == device, seen.insert(stamp.identity).inserted else { continue }
             directories += 1
             do {
+                let swiftOutputs = ProjectOutputs.swiftOutputs(in: directory)
+                for output in swiftOutputs where policy.exclusionReason(output.path) == nil {
+                    let snapshot = try FileWalker.completeSnapshot(output.path, deadline: start.addingTimeInterval(limits.seconds))
+                    if snapshot.allocatedBytes > 0 {
+                        candidates.append(CleanupCandidate(path: output.path, title: "\(directory.lastPathComponent) / \(output.deletingLastPathComponent().lastPathComponent)", category: .builds, rule: .customBuildOutput,
+                            reason: "Swift compiler output identified by its target triple, package manifest and build description.", consequence: "The next build takes longer. Source, package checkouts and packaged applications stay.", recommendation: .review, snapshot: snapshot))
+                        projects.insert(directory.path); scannedEntries += snapshot.entryCount
+                    }
+                }
                 let children = try Files.children(directory.path)
                 for child in children {
                     try Task.checkCancellation()
@@ -51,6 +60,7 @@ extension BleachEngine {
                           let childStamp = try? Files.stamp(child.path), !childStamp.dataless,
                           childStamp.owner == getuid(), childStamp.device == device else { continue }
                     if artifacts.contains(name), childStamp.kind == 2 {
+                        if name == ".build", swiftOutputs.contains(where: { Files.pathIsWithin($0.path, child.path) }) { continue }
                         guard CleanupPolicy.projectArtifactMatches(child) else { continue }
                         let snapshot = try FileWalker.completeSnapshot(child.path, deadline: start.addingTimeInterval(limits.seconds))
                         guard snapshot.allocatedBytes > 0 else { continue }
@@ -62,6 +72,13 @@ extension BleachEngine {
                             consequence: "Project source stays in place. Reinstall dependencies or rebuild before using this project again; locally edited generated files may be lost.",
                             recommendation: .review, snapshot: snapshot))
                         projects.insert(directory.path); scannedEntries += snapshot.entryCount
+                        continue
+                    }
+                    if childStamp.kind == 2, let outputProject = ProjectOutputs.nextProject(for: child), Files.pathIsWithin(outputProject.path, context.home.path) {
+                        let snapshot = try FileWalker.completeSnapshot(child.path, deadline: start.addingTimeInterval(limits.seconds))
+                        candidates.append(CleanupCandidate(path: child.path, title: "\(directory.lastPathComponent) / \(name)", category: .builds, rule: .customBuildOutput,
+                            reason: "Next.js output identified by BUILD_ID, build manifests, server and static folders beside a Next.js project.", consequence: "Rebuild before serving this output. Project source and dependencies stay.", recommendation: .review, snapshot: snapshot, outputProjectPath: outputProject.path))
+                        projects.insert(ProjectOutputs.nextProject(for: child)?.path ?? directory.path); scannedEntries += snapshot.entryCount
                         continue
                     }
                     guard !name.hasPrefix("."), !policy.protectedUserPath(child.path), !ignored.contains(name) else { continue }

@@ -7,9 +7,9 @@ struct Arguments {
     var flags: Set<String> = []
     var values: [String: [String]] = [:]
 
-    static let commands = ["scan", "discover", "clean", "apply", "analyze", "duplicates", "apps", "uninstall", "history", "undo", "empty", "protect", "config", "status", "completion"]
+    static let commands = ["scan", "discover", "inactive", "growth", "share", "clean", "apply", "analyze", "duplicates", "apps", "uninstall", "history", "undo", "empty", "protect", "config", "status", "completion"]
     private static let valueOptions: Set<String> = ["root", "state", "output", "select", "projects", "category", "min-size", "limit", "keep", "add-project", "remove-project", "age-days"]
-    private static let switches: Set<String> = ["json", "yes", "dry-run", "no-color", "help", "version", "licenses", "all", "with-data", "watch", "remove"]
+    private static let switches: Set<String> = ["json", "yes", "dry-run", "no-color", "help", "version", "licenses", "all", "with-data", "watch", "remove", "record"]
     private static let aliases = ["-h": "--help", "-v": "--version", "-n": "--dry-run", "-y": "--yes", "-j": "--json"]
 
     init(_ input: [String]) throws {
@@ -43,7 +43,9 @@ struct Arguments {
         guard command.isEmpty || Self.commands.contains(command) else { throw BleachError("Unknown command '\(Display.terminalSafe(command))'. Use bleach --help.") }
         let common: Set<String> = ["root", "state", "json", "no-color", "help", "version", "licenses"]
         let allowed: [String: Set<String>] = [
-            "": [], "scan": ["projects", "category", "output"], "discover": ["output"],
+            "": [], "scan": ["projects", "category", "output"], "discover": ["output"], "inactive": ["output"],
+            "growth": ["record"],
+            "share": ["select", "yes", "dry-run"],
             "clean": ["projects", "category", "select", "all", "yes", "dry-run"],
             "apply": ["select", "all", "yes", "dry-run"],
             "analyze": ["limit"], "duplicates": ["output", "min-size", "keep"],
@@ -54,7 +56,7 @@ struct Arguments {
         ]
         let unsupported = flags.union(values.keys).subtracting(common.union(allowed[command] ?? []))
         if let option = unsupported.sorted().first { throw BleachError("--\(option) is not valid for '\(command)'") }
-        let maxPositionals = ["discover": 1, "apply": 1, "analyze": 1, "duplicates": 1, "uninstall": 1, "undo": 1, "empty": 1, "protect": 1, "completion": 1][command] ?? 0
+        let maxPositionals = ["discover": 1, "inactive": 1, "growth": 1, "share": 1, "apply": 1, "analyze": 1, "duplicates": 1, "uninstall": 1, "undo": 1, "empty": 1, "protect": 1, "completion": 1][command] ?? 0
         guard positionals.count <= maxPositionals else { throw BleachError("Too many arguments for '\(command)'") }
     }
     func has(_ flag: String) -> Bool { flags.contains(flag) }

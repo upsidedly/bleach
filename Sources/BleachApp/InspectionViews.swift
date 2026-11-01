@@ -13,6 +13,7 @@ struct SpaceView: View {
                         Button("Back", systemImage: "chevron.left") { model.goBack() }.labelStyle(.iconOnly).disabled(model.diskBack.isEmpty || model.isBusy).help("Previous folder")
                         Text(Display.path(report.path, home: model.home)).font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                         Spacer()
+                        Button("Track Growth") { model.measureGrowth(URL(fileURLWithPath: report.path)) }.disabled(model.isBusy)
                         Button("Choose Folder…") { model.chooseFolder(title: "Explore disk space") { model.analyze($0) } }.disabled(model.isBusy)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -63,7 +64,7 @@ struct SpaceView: View {
             EmptyState(symbol: "chart.bar.xaxis", title: "See where it goes.", message: "Find private disk usage, see which bytes are shared by APFS clones, and explore the largest files.") {
                 HStack {
                     Button("Choose Folder…") { model.chooseFolder(title: "Explore disk space") { model.analyze($0) } }
-                    Button("Explore Home") { model.analyze(model.home) }.buttonStyle(.borderedProminent)
+                    Button { model.analyze(model.home) } label: { PrimaryButtonLabel(title: "Explore Home") }.buttonStyle(.borderedProminent)
                 }.controlSize(.large).disabled(model.isBusy)
             }
         }
@@ -77,7 +78,7 @@ struct DuplicatesView: View {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Text("\(report.groups.count) duplicate groups").font(.title2.weight(.semibold))
+                        Text(report.groups.count == 1 ? "1 duplicate group" : "\(report.groups.count) duplicate groups").font(.title2.weight(.semibold))
                         Spacer()
                         Button("Choose Folder…") { chooseFolder() }.disabled(model.isBusy)
                     }
@@ -85,7 +86,13 @@ struct DuplicatesView: View {
                     HStack {
                         Text("\(report.filesHashed) files hashed · \(Display.duration(report.plan.duration))").font(.caption).foregroundStyle(.secondary)
                         Spacer()
+                        Button("Share Storage…") { model.sharingRequest = report.plan.selecting(model.duplicateSelection) }
+                            .disabled(model.isBusy || !model.canShareSelection)
+                            .help("Keep both paths and share APFS data for selected generated Playwright captures")
                         Button("Select Extra Copies") { model.duplicateSelection = Set(report.plan.candidates.map(\.path)) }.buttonStyle(.borderless).font(.caption).disabled(model.isBusy)
+                    }
+                    if let receipt = model.sharingReceipt {
+                        Text("\(receipt.pathsPreserved == 1 ? "1 copy path" : "\(receipt.pathsPreserved) copy paths") preserved with shared storage\(receipt.batch.problemCount > 0 ? " · originals need review in Recovery" : "")").font(.caption).foregroundStyle(.secondary)
                     }
                 }.padding(24)
                 if report.plan.candidates.isEmpty {
@@ -127,7 +134,7 @@ struct DuplicatesView: View {
         } else {
             EmptyState(symbol: "square.on.square", title: "Same file. Less space.",
                 message: "Compare complete file contents, keep the copy you want, and review the extras. Nothing is selected for you.") {
-                Button("Choose Folder…") { chooseFolder() }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.isBusy)
+                Button { chooseFolder() } label: { PrimaryButtonLabel(title: "Choose Folder…") }.buttonStyle(.borderedProminent).controlSize(.large).disabled(model.isBusy)
             }
         }
     }
@@ -161,7 +168,7 @@ struct ApplicationsView: View {
                     Text("\(model.apps.count) applications").font(.title2.weight(.semibold))
                     Spacer()
                     if let path = model.appSelection, let app = model.apps.first(where: { $0.path == path }) {
-                        Button("Review Removal…") { model.previewApp(path) }
+                        Button { model.previewApp(path) } label: { PrimaryButtonLabel(title: "Review Removal…") }
                             .buttonStyle(.borderedProminent).disabled(!app.removable || app.running || model.isBusy)
                             .help(app.running ? "Quit the app before removing it" : "Review app and exact related files")
                     }

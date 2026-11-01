@@ -58,7 +58,7 @@ struct RecoveryView: View {
                         Spacer()
                         Button("Delete Permanently…", role: .destructive) { model.eraseRequest = batch }
                             .disabled((batch.recoverable.isEmpty && batch.interruptedDeletions.isEmpty) || model.isBusy)
-                        Button("Restore") { model.restore(batch) }.buttonStyle(.borderedProminent)
+                        Button { model.restore(batch) } label: { PrimaryButtonLabel(title: "Restore") }.buttonStyle(.borderedProminent)
                             .disabled(batch.recoverable.isEmpty || model.isBusy)
                             .accessibilityIdentifier("restore-batch")
                     } else {

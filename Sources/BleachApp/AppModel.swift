@@ -4,25 +4,28 @@ import Observation
 import SwiftUI
 
 enum Destination: String, CaseIterable, Identifiable {
-    case clean, space, duplicates, applications, recovery, system
+    case clean, space, growth, duplicates, applications, recovery, system
     var id: String { rawValue }
     var title: String {
-        switch self { case .clean: "Clean up"; case .space: "Space"; case .duplicates: "Duplicates";
+        switch self { case .clean: "Clean up"; case .space: "Space"; case .growth: "Growth"; case .duplicates: "Duplicates";
         case .applications: "Applications"; case .recovery: "Recovery"; case .system: "System" }
     }
     var symbol: String {
-        switch self { case .clean: "sparkles"; case .space: "chart.bar.xaxis"; case .duplicates: "square.on.square";
+        switch self { case .clean: "sparkles"; case .space: "chart.bar.xaxis"; case .growth: "chart.line.uptrend.xyaxis"; case .duplicates: "square.on.square";
         case .applications: "square.grid.2x2"; case .recovery: "clock.arrow.circlepath"; case .system: "waveform.path.ecg" }
     }
 }
 
 enum Work: String {
-    case idle, scanning, discovering, analyzing, comparing, loadingApps, planningRemoval, moving, restoring, erasing, saving
+    case idle, scanning, discovering, inactive, measuringGrowth, sharing, analyzing, comparing, loadingApps, planningRemoval, moving, restoring, erasing, saving
     var label: String {
         switch self {
         case .idle: ""
         case .scanning: "Scanning local files…"
         case .discovering: "Finding project artifacts, expanded ZIPs and installed-app installers…"
+        case .inactive: "Checking project activity, process references and reinstall recipes…"
+        case .measuringGrowth: "Measuring changes in private storage…"
+        case .sharing: "Creating and verifying storage-sharing copies…"
         case .analyzing: "Measuring disk space…"
         case .comparing: "Comparing file contents…"
         case .loadingApps: "Reading applications…"
@@ -33,7 +36,7 @@ enum Work: String {
         case .saving: "Saving…"
         }
     }
-    var cancellable: Bool { [.scanning, .discovering, .analyzing, .comparing, .loadingApps, .planningRemoval].contains(self) }
+    var cancellable: Bool { [.scanning, .discovering, .inactive, .measuringGrowth, .analyzing, .comparing, .loadingApps, .planningRemoval].contains(self) }
 }
 
 enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Suggested", review = "Review", inUse = "In use" }
@@ -69,6 +72,10 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
     var duplicateReport: DuplicateReport?
     var duplicateSelection: Set<String> = []
     var duplicateFolder: URL?
+    var growthReport: GrowthReport?
+    var growthRoot: URL?
+    var sharingRequest: CleanupPlan?
+    var sharingReceipt: SharingReceipt?
     var apps: [InstalledApp] = []
     var appSelection: String?
     var uninstall: CleanupPlan?
@@ -190,10 +197,46 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         }
     }
 
+    func reviewInactiveProjects() {
+        perform(.inactive) { [self] in
+            let result = try await engine.inactiveProjects(context: context)
+            try Task.checkCancellation()
+            plan = result; selectedPaths = []; focusedCandidate = result.candidates.first?.path
+            discovery = nil; discoveredPaths = []; lastBatch = nil
+            filter = .all; search = ""; category = nil
+        }
+    }
+
+    func measureGrowth(_ folder: URL, record: Bool = true) {
+        perform(.measuringGrowth) { [self] in
+            let result = try await engine.growth(in: folder, context: context, record: record)
+            try Task.checkCancellation()
+            growthReport = result; growthRoot = folder; destination = .growth
+        }
+    }
+
+    var canShareSelection: Bool {
+        !duplicateSelection.isEmpty && duplicateSelection.isSubset(of: Set(duplicateReport?.shareablePaths ?? []))
+    }
+
+    func shareStorage() {
+        guard let preview = sharingRequest else { return }
+        sharingRequest = nil; sharingReceipt = nil
+        perform(.sharing) { [self] in
+            let result = try await engine.shareDuplicateStorage(preview, context: context)
+            sharingReceipt = result; batches = try await engine.history(context: context)
+            duplicateSelection = []
+            if let duplicateFolder { duplicateReport = try await engine.duplicates(in: duplicateFolder, context: context) }
+            system = try await SystemReader.sample(at: home)
+            if result.batch.problemCount > 0 { errorMessage = "Some originals remain in Recovery. Both paths may already exist; review the batch before retrying." }
+        }
+    }
+
     func refresh() {
         switch destination ?? .clean {
         case .clean: scan()
         case .space: analyze(diskRoot ?? home, remember: false)
+        case .growth: if let growthRoot { measureGrowth(growthRoot, record: false) }
         case .duplicates: if let duplicateFolder { compare(duplicateFolder) }
         case .applications: loadApps()
         case .recovery: loadHistory()
@@ -267,6 +310,7 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
 
     func compare(_ folder: URL) {
         perform(.comparing) { [self] in
+            sharingReceipt = nil
             let report = try await engine.duplicates(in: folder, context: context)
             try Task.checkCancellation()
             duplicateReport = report; duplicateFolder = folder; duplicateSelection = []; focusedCandidate = nil

@@ -77,9 +77,11 @@ struct RecoveryStore {
     func load(_ id: UUID) throws -> RecoveryBatch {
         let url = directory(id).appendingPathComponent("batch.json")
         let batch = try JSONCoding.decoder().decode(RecoveryBatch.self, from: Files.readPrivateFile(url))
+        let slots = batch.items.flatMap { [$0.slot] + ($0.stagedClone.map { [$0.slot] } ?? []) }
         guard batch.id == id, batch.schemaVersion == 1, batch.home == context.home.path,
               batch.items.count <= 100_000,
               Set(batch.items.map(\.slot)).count == batch.items.count,
+              Set(slots).count == slots.count, slots.allSatisfy({ UUID(uuidString: $0) != nil && !$0.contains("/") }),
               batch.items.allSatisfy({ UUID(uuidString: $0.slot) != nil && !$0.slot.contains("/") && $0.candidate.snapshot.root.inode > 0 && $0.candidate.allocatedBytes >= 0 }) else {
             throw BleachError("Invalid recovery manifest; no files were changed: \(url.path)")
         }
@@ -140,7 +142,7 @@ extension BleachEngine {
     public func apply(_ plan: CleanupPlan, context: ScanContext) async throws -> RecoveryBatch {
         guard geteuid() != 0 else { throw BleachError("Run Bleach as your normal user, without sudo.") }
         guard plan.schemaVersion == BleachVersion.planSchema, plan.home == context.home.path,
-              ["scan", "duplicates", "uninstall", "discover"].contains(plan.origin), !plan.candidates.isEmpty, plan.candidates.count <= 10_000 else {
+              ["scan", "duplicates", "uninstall", "discover", "inactive"].contains(plan.origin), !plan.candidates.isEmpty, plan.candidates.count <= 10_000 else {
             throw BleachError("Invalid or empty cleanup plan")
         }
         let age = context.now.timeIntervalSince(plan.createdAt)
@@ -196,7 +198,7 @@ extension BleachEngine {
                 let currentPreferences = try PreferencesStore(context: context).load()
                 let freshOwners = await RunningApplications.snapshot()
                 let currentContext = ScanContext(home: context.home, state: context.state, now: context.now,
-                                                runningOwners: context.runningOwners + freshOwners)
+                                                runningOwners: context.runningOwners + freshOwners, compilerCache: context.compilerCache)
                 let currentPolicy = CleanupPolicy(context: currentContext, preferences: currentPreferences)
                 try currentPolicy.validate(candidate)
                 guard try FileWalker.completeSnapshot(candidate.path).matchesFileState(candidate.snapshot) else {
@@ -310,7 +312,7 @@ extension BleachEngine {
             do {
                 guard item.candidate.path.hasPrefix("/"), Files.lexicalPath(item.candidate.path) == item.candidate.path,
                       policy.ruleMatches(item.candidate, restoring: true),
-                      Files.pathIsWithin(item.candidate.path, context.home.path) || item.candidate.rule == .application,
+                      Files.pathIsWithin(item.candidate.path, context.home.path) || item.candidate.rule == .application || (item.candidate.rule == .clangModuleCache && item.candidate.path == context.compilerCache?.path),
                       try Files.stamp(source.path).identity == item.candidate.snapshot.root.identity else {
                     throw BleachError("Recovery identity or original path is invalid; inspect this item.")
                 }
@@ -320,6 +322,9 @@ extension BleachEngine {
                 let parent = URL(fileURLWithPath: item.candidate.path).deletingLastPathComponent()
                 try Files.makeDirectory(parent)
                 batch.items[index].state = .restoring
+                try store.save(batch)
+                try discardStagedClone(item, batch: batch.id, store: store)
+                batch.items[index].stagedClone = nil
                 try store.save(batch)
                 let stamp = item.candidate.snapshot.root
                 try Files.require(bl_move_exclusive(source.path, item.candidate.path, stamp.device, stamp.inode), item.candidate.path)
@@ -345,12 +350,21 @@ extension BleachEngine {
             let item = batch.items[index]
             let path = store.itemURL(batch: id, slot: item.slot).path
             do {
+                if let replacement = item.sharedReplacement {
+                    guard try Files.stamp(item.candidate.path) == replacement.stamp,
+                          try Files.sha256(item.candidate.path, expected: replacement.stamp) == replacement.sha256 else {
+                        throw BleachError("Storage-sharing replacement changed; original retained in Recovery")
+                    }
+                }
                 let snapshot = try FileWalker.completeSnapshot(path)
                 guard snapshot.root.identity == item.candidate.snapshot.root.identity,
                       item.state == .eraseInterrupted || snapshot.fingerprint == item.candidate.snapshot.fingerprint else {
                     throw BleachError("Recovery contents changed; retained for inspection.")
                 }
                 batch.items[index].state = .erasing
+                try store.save(batch)
+                try discardStagedClone(item, batch: id, store: store)
+                batch.items[index].stagedClone = nil
                 try store.save(batch)
                 try Files.require(bl_erase(path, snapshot.root.device, snapshot.root.inode), path)
                 batch.items[index].state = .erased; batch.items[index].message = nil
@@ -364,5 +378,18 @@ extension BleachEngine {
         batch.availableAfter = SystemReader.disk(at: context.home).available
         try store.save(batch)
         return batch
+    }
+
+    private func discardStagedClone(_ item: RecoveryItem, batch: UUID, store: RecoveryStore) throws {
+        guard let staged = item.stagedClone else { return }
+        let path = store.itemURL(batch: batch, slot: staged.slot).path
+        guard let stamp = try Files.optionalStamp(path) else { return }
+        guard stamp.kind == 1, stamp.owner == getuid(), stamp.links == 1,
+              staged.stamp == nil || staged.stamp?.identity == stamp.identity,
+              let proof = item.candidate.duplicateProof,
+              try Files.sha256(path, expected: stamp) == proof.sha256 else {
+            throw BleachError("Unverified staged clone retained in this Recovery batch")
+        }
+        try Files.require(bl_erase(path, stamp.device, stamp.inode), path)
     }
 }

@@ -54,6 +54,11 @@ def create_fixture(root: Path) -> Path:
             target = file
         age_roots.append((target, age))
     write("Projects/Sketch/package.json", 0).write_text('{"name":"fixture-sketch","dependencies":{"example":"1.0.0"}}')
+    write("Projects/Captures/package.json", 0).write_text('{"devDependencies":{"@playwright/test":"1.56"}}')
+    write("Projects/Captures/test-results/run/trace.zip", 1024**2, 89)
+    write("Projects/Captures/playwright-report/data/trace.zip", 1024**2, 89)
+    write(".codex/sessions/fixture.jsonl", 4096, 83)
+    write(".t3/userdata/fixture.sqlite", 8192, 84)
     write("Documents/Keep/Field Notes.pdf", 128 * 1024, 94)
     write("Documents/Copy/Field Notes.pdf", 128 * 1024, 94)
     write("Documents/Unique.txt", 4096, 61)

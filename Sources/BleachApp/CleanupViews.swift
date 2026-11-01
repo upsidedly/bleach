@@ -18,10 +18,10 @@ struct CleanupView: View {
             }
             if let plan = model.plan {
                 if plan.candidates.isEmpty {
-                    EmptyState(symbol: "checkmark.circle", title: emptyTitle,
-                        message: emptyMessage) {
+                    EmptyState(symbol: "checkmark.circle", title: plan.origin == "inactive" ? "No inactive dependencies found" : emptyTitle,
+                        message: plan.origin == "inactive" ? "Recent projects, live references and environments without a locked reinstall recipe were retained." : emptyMessage) {
                         Button("Scan Again") { model.scan() }.disabled(model.isBusy)
-                        Button("Find More Space") { model.findMoreSpace() }.disabled(model.isBusy)
+                        moreSpace.disabled(model.isBusy)
                     }
                     issuesButton(plan)
                 } else {
@@ -64,7 +64,7 @@ struct CleanupView: View {
                             Button("Select Suggested") { model.selectedPaths = Set(plan.suggested.map(\.path)) }.buttonStyle(.borderless)
                             if !model.selectedPaths.isEmpty { Button("Clear") { model.selectedPaths = [] }.buttonStyle(.borderless).foregroundStyle(.secondary) }
                             Spacer()
-                            Button("Find More Space") { model.findMoreSpace() }
+                            moreSpace
                                 .buttonStyle(.borderless).disabled(model.isBusy)
                                 .help("Discover project artifacts, expanded ZIPs and installers matching apps already installed")
                                 .accessibilityIdentifier("find-more-space")
@@ -82,13 +82,13 @@ struct CleanupView: View {
                 EmptyState(symbol: "sparkles", title: "A little more room.",
                     message: "Find old caches, logs, installers and build artifacts. Review each item, then keep a way back.") {
                     VStack(spacing: 14) {
-                        Button("Scan Your Mac") { model.scan() }
+                        Button { model.scan() } label: { PrimaryButtonLabel(title: "Scan Your Mac") }
                             .buttonStyle(.borderedProminent).controlSize(.large)
                             .keyboardShortcut(.return, modifiers: [])
                             .disabled(model.isBusy)
                             .accessibilityIdentifier("scan-mac")
                         Text("Scanning changes nothing.").font(.caption).foregroundStyle(.secondary)
-                        Button("Find More Space") { model.findMoreSpace() }.buttonStyle(.borderless).disabled(model.isBusy)
+                        moreSpace.buttonStyle(.borderless).disabled(model.isBusy)
                     }
                 }
             }
@@ -104,6 +104,13 @@ struct CleanupView: View {
             return "Your files are back in their original locations. Scan again to refresh this review."
         }
         return model.lastBatch == nil ? "No eligible files were found in these locations. Find More Space checks project artifacts and expanded ZIP archives." : "Your selected files are in Recovery. Restore them there, or delete the batch to free disk space."
+    }
+
+    private var moreSpace: some View {
+        Menu("Find More Space") {
+            Button("Generated Outputs & Archives") { model.findMoreSpace() }
+            Button("Inactive Projects") { model.reviewInactiveProjects() }
+        }
     }
 
     @ViewBuilder private func issuesButton(_ plan: CleanupPlan) -> some View {
@@ -247,7 +254,7 @@ struct ReviewSheet: View {
             HStack {
                 Spacer()
                 Button("Cancel", role: .cancel) { model.review = nil }.keyboardShortcut(.escape, modifiers: [])
-                Button("Move to Recovery") { model.applyReview() }
+                Button { model.applyReview() } label: { PrimaryButtonLabel(title: "Move to Recovery") }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("confirm-move")
             }

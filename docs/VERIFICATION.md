@@ -1,50 +1,45 @@
 # Verification
 
-29 October 2026. Scope: original source-build CLI and native macOS app, version 0.2.0. Testing used macOS 27.2 on Mac16,8, Apple Silicon, 24 GiB RAM, 12 logical cores, and Apple Swift 6.3.2 with the selected Command Line Tools SDK.
+31 October 2026. Bleach 0.3.0, Apple silicon, macOS 27.2 on Mac16,8. Apple Swift 6.3.2, selected Command Line Tools, macOS 26.5 SDK, deployment target macOS 14. No global Xcode selection or system access settings were changed.
 
 ## Automated evidence
 
 | Check | Result |
 | --- | --- |
-| `./scripts/test.sh` | 80 tests in 5 suites passed after 0.351 seconds. |
-| `python3 scripts/verify-cli.py --binary build/bleach` | 10 integration checks passed against a disposable home. |
-| Focused Address Sanitizer run of `InspectionTests` | 22 inspection cases passed; no reported sanitizer error. Retained for the unchanged C analysis/traversal implementation. |
-| `./scripts/build.sh` | Both release products built; app plist and strict local code signature checks passed. |
-| `zsh -n` for build/install/test/check scripts | Passed. |
-| Interactive terminal menu | Arrow navigation and `q` exit passed in an `xterm-256color` PTY. |
-| Local installation | Updated `/Applications/Bleach.app` and `~/.local/bin/bleach` to 0.2.0; strict signature verification passed. The previous app was backed up in private Bleach state; existing user settings/history were retained. |
-| `python3 scripts/verify-discovery.py --binary build/bleach` | All 5 expected opportunities found, decoys retained, allocation matched independent inventory, exact plan applied and undone, kept copies unchanged. Raw coverage and binary SHA-256 are recorded in `docs/benchmarks/discovery.json`. |
-| Read-only Mole comparison | All three fixture allocation totals matched independent `lstat` inventories. Warm-cache medians, full timings, hardware and binary hashes are in [the benchmark](benchmarks/results.md). |
+| `./scripts/test.sh` | 107 tests in 10 suites passed. |
+| Final sharing reporting repair | All 6 `SharingTests` reran and passed; unchanged core evidence retained. |
+| Address Sanitizer | 36 cases across Sharing, OutputDiscovery, InactiveProject and Inspection suites passed, with no reported sanitizer error. A unique disposable scratch build was removed afterward. |
+| `scripts/verify-cli.py --binary build/bleach` | 12 integration checks passed against disposable files. |
+| `scripts/verify-discovery.py --binary build/bleach` | All 5 expected opportunities found; decoys retained, independent allocation matched, apply/undo passed and kept copies stayed unchanged. |
+| `scripts/verify-storage-workflows.py --binary build/bleach` | Seven workflow checks passed, including explicit baselines, protected agent data, confirmation refusal, clone sharing and independent in-place edits. |
+| Same storage workflow against the CLI inside the mounted DMG | All seven checks passed. |
+| Interactive terminal | Inactive-project menu entry, queued arrow input and `q` exit passed in an xterm PTY. |
+| Release build | Both products built without new compiler warnings; plist, arm64 architecture and strict local signatures passed. |
+| Local update | Installed app and CLI report 0.3.0; both executables, version plist and icon match the DMG. Prior app backed up; user settings and history retained. |
+| DMG | Image checksum verified; mounted read-only; signed 0.3.0 app, background and Applications symlink verified. Finder icon positions were read from .DS_Store: app (160,180), Applications (440,180). |
 
-The core cases cover cache default selection, recent/package caches, running-owner refusal, deep changes after preview, replaced roots, linked roots and ancestors, linked children, unreadable descendants, exclusions, malformed settings/plans/journals, stale plans, overlapping targets, cross-process locking, duplicate hashing, keeper changes, hard links, sparse files, exact app IDs, shared app data, no-overwrite restore, journal reconciliation and interrupted permanent deletion. The CLI canary verifies clean JSON, dry runs, confirmation refusal without a terminal, saved-plan selection, cleanup/undo, scoped permanent deletion, retained duplicate copies, protected Trash, output-file refusal, argument errors and live system readings.
+Raw fixture reports and standalone CLI SHA-256 are in [discovery.json](benchmarks/discovery.json) and [storage-workflows.json](benchmarks/storage-workflows.json). The sharing fixture changed one extra copy from 1,048,576 private bytes to zero while retaining both paths. This is a constructed APFS fixture, not a general Mac savings or volume free-space claim. Older Mole comparison timings remain historical evidence for their documented source and workload.
+
+The new tests cover source creation/modification/ctime, locked reinstall recipes, ambiguous package managers, live working directories and capture descriptors, apply-time recipe changes, custom outputs amid valuable build-folder media, fixture isolation from the real compiler cache, metadata-only growth reads, bounded/invalid baseline persistence, full-hash clone verification, permissions and xattrs, independent writes, changed keepers, recreated paths, staged Recovery copies and refusal to erase an edited replacement. Existing boundary, APFS, installer, archive and Recovery regressions also passed. Positive inactivity tests advance only the injected clock because ctime cannot be backdated.
 
 ## Native evidence
 
-Version 0.2.0's real native Find More Space action added five review items and 230.7 MB (220 MiB) to the controlled fixture's existing 16.8 MB cache review. It preserved the existing selected total, displayed installed-app evidence (actual bundle ID, version 1.2 and build 12), updated the total after selecting that installer, and included it in the ⌘Return cleanup review. Compact 880 × 580 layout exposed all actions, readable wrapped evidence, vertical scrolling and no horizontal overflow. The review was cancelled; native verification did not move real-home data.
+The compiled app was exercised through native accessibility and screenshot APIs with real disposable files, in light/dark appearances and 880×580 / 1100×740 content sizes.
 
-The installed final build was also inspected in light appearance at that compact size, confirming the same five discoveries and corrected singular installer label. It then reopened normally against the real home, showing version 0.2.0 without a load error. Both coverage and timing report hashes match the final standalone CLI.
+- Cache defaults and private totals remained readable, with running Chrome disabled. The new Find More Space menu exposed generated-output and inactive-project reviews. The recent fixture was correctly retained, with a readable empty state and skipped reason.
+- Keyboard sidebar navigation, refresh, selection and Escape cancellation worked. Growth exposed useful accessible row names, private-byte deltas and explicit baseline controls. A 16 KiB fixture addition appeared as +16 KB while refresh left the saved reference unchanged. Codex storage measurement displayed its history-preservation explanation.
+- The sharing sheet showed the selected path, retained counterpart, private estimate and permanent Recovery step. Cancellation preserved selection. Native sharing then kept both capture paths, displayed zero private bytes for the extra copy and cleared selection. File contents and erased fixture journal states were checked afterward. A subsequent refresh removed the previous success receipt.
+- A light-mode primary-button contrast defect was repaired using explicit appearance-aware text labels while preserving native styles, roles, focus and shortcuts. Light and dark rendered checks confirmed readable contrasting labels. Apple's [tint documentation](https://developer.apple.com/documentation/swiftui/view/tint(_:)) documents the platform distinction between bezel and label tint.
+- A generic sharing confirmation rendered blank in the native capture. The final implementation uses the same native SwiftUI sheet approach as existing exact cleanup review; its contents and actions rendered and executed correctly.
 
-The real compiled app was inspected through native accessibility and screenshot tools, using actual disposable fixture files. No user cache was moved or erased by these checks.
-
-- Light and dark windows, normal desktop layout and an 880 × 580-point content area.
-- Native cleanup selection, per-item inspector, running-app disabled controls and keyboard review via ⌘Return.
-- Review sheet and an actual recoverable fixture move.
-- GUI-created batch restored from the CLI; CLI-created batch restored from the GUI.
-- Recovery states visibly updated after cross-interface operations.
-- Compact cleanup table repaired to remove horizontal overflow while retaining category, review status, allocation, selection and the inspector.
-- Real system readings displayed in the compact window.
-- Accessibility tree exposed checkbox names, disabled state, navigation, table rows, actions and item descriptions. This is not a claim of a complete VoiceOver conformance audit.
-
-The final cache-selection correction was checked in the running app: recent caches and npm cache started selected, Chrome's running-owner cache was disabled and unselected, and toggling an 8.4 MB cache changed both totals from 25 MB / 7 items to 16.6 MB / 6 items and back. The fixture scan completed in 47 ms. These fixture timings are functional evidence, not a whole-Mac speed claim.
-
-A read-only scan of the real home paused inside macOS's Downloads directory access check. Cancellation returned the interface to its idle state. The system permission dialog could not be operated by the available native automation, so a completed real-home cleanup scan is not claimed. No access setting was changed and no real-home cleanup ran.
+Native and automated verification changed only disposable fixtures. The separately authorized old-project cleanup is not test evidence. No real chat, source or personal data was used as a mutation fixture. Task-owned native and sanitizer fixtures were removed.
 
 ## Limits
 
-The deployment target and compiler availability checks cover macOS 14+, but this session exercised only the listed Apple Silicon runtime. Intel, older macOS runtime behavior, a full VoiceOver session, network disks, remount/reboot identity changes, actual power loss, and every installed third-party app were not tested. Interrupted journal states were exercised with controlled filesystem fixtures. Read-only native folder-picker flows were not all completed through automation; their shared engine operations were covered by core and CLI tests.
+Runtime checks used the listed Apple silicon host. macOS 14 is the compiled deployment target, not a claim of an executed older-runtime matrix. Intel, a full VoiceOver session, every accessibility preference, network disks, actual power loss and every third-party app were not exercised. Native folder-picker and permission cases retain their earlier scope limits. Process checks cover visible user-owned working directories, executable/argument paths and vnode descriptors; inaccessible/racing references remain an OS limitation. Linked Git worktrees and unsupported reinstall recipes require manual review.
 
-The bundle is locally signed, not notarized. No remote repository, package, release, telemetry, privileged helper or update service was published or enabled. Recovery holds disk space until explicitly deleted, and estimated allocation cannot promise an equal free-space gain on APFS.
+The bundle is locally signed and is not notarized. Recovery staging does not free space. Private, shared, hard-linked and unverified bytes remain distinct; neither allocation nor a private-byte delta promises an equal change in available space.
 
 ## Verdict
 
-**ACCEPT** for the implemented local source-build scope on the tested macOS runtime. The discovery methods, cache defaults, dynamic selected total, shared cleanup and cross-interface recovery have current passing evidence. ZIP64, unmounted-image identity, PKG receipt analysis, distribution signing/notarization and the untested runtime/accessibility matrix remain outside this acceptance. Format/resource limits are documented in [DISCOVERY.md](DISCOVERY.md).
+**ACCEPT** for the implemented macOS CLI/app scope on the tested runtime and the verified Apple silicon drag-and-drop DMG.

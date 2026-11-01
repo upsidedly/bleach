@@ -36,6 +36,9 @@ int bl_erase(const char *path, uint64_t device, uint64_t inode);
 int bl_acquire_lock(const char *path);
 void bl_close(int descriptor);
 int bl_last_error(void);
+/* 1 in use, 0 no visible reference, negative errno when inspection is partial. */
+int bl_path_in_use(const char *path, int include_cwd);
+int bl_clone_copy(const char *keeper, const BLStat *keeper_stat, const char *metadata_source, const BLStat *metadata_stat, const char *destination);
 
 typedef struct {
     char *path;

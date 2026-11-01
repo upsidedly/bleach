@@ -1,0 +1,16 @@
+{
+  "version": "bleach 0.3.0",
+  "binarySHA256": "8a4922658476fbce74ed341c6922411a6113d6ab05dce7a547e35f91516816ca",
+  "checks": [
+    "custom-home scans never reach the real compiler cache",
+    "recent sources are retained; inactive review cannot implicitly apply",
+    "growth reads stay read-only; explicit baselines expose new private allocation",
+    "sharing requires confirmation and dry-run preserves every copy",
+    "APFS sharing reduces measured private allocation and keeps both independent paths",
+    "later in-place writes leave the other copy unchanged",
+    "agent measurements preserve session and database contents"
+  ],
+  "sharingPrivateBytesBefore": 1048576,
+  "sharingPrivateBytesAfter": 0,
+  "limits": "Disposable fixture only. No real home cleanup. Private allocation is not a volume free-space receipt. Old-project positive cases use an injected clock in core tests because ctime cannot be backdated."
+}

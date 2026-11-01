@@ -1,7 +1,8 @@
+import Darwin
 import Foundation
 
 public enum BleachVersion {
-    public static let current = "0.2.0"
+    public static let current = "0.3.0"
     public static let planSchema = 1
 }
 
@@ -89,9 +90,10 @@ public enum CleanupCategory: String, Codable, CaseIterable, Sendable, Identifiab
 public enum RuleID: String, Codable, Sendable {
     case userCache, log, xcodeDerivedData, npmCache, pipCache, gradleCache, swiftPMCache
     case projectArtifact, installer, application, appRelatedData, duplicate, expandedArchive, archivedInstaller
+    case inactiveDependencies, customBuildOutput, clangModuleCache, npxCache
     public var isRebuildableCache: Bool {
         switch self {
-        case .userCache, .xcodeDerivedData, .npmCache, .pipCache, .gradleCache, .swiftPMCache: true
+        case .userCache, .xcodeDerivedData, .npmCache, .pipCache, .gradleCache, .swiftPMCache, .clangModuleCache, .npxCache: true
         default: false
         }
     }
@@ -144,6 +146,8 @@ public struct CleanupCandidate: Codable, Sendable, Identifiable {
     public var duplicateProof: DuplicateProof?
     public var archiveProof: ArchiveProof?
     public var installerProof: InstallerProof?
+    public var projectEvidence: ProjectEvidence? = nil
+    public var outputProjectPath: String? = nil
     public var allocatedBytes: Int64 { snapshot.allocatedBytes }
     public var storage: StorageUsage { snapshot.storageUsage }
     public var privateBytes: Int64 { storage.privateBytes }
@@ -214,13 +218,24 @@ public struct ScanContext: Sendable {
     public let state: URL
     public let now: Date
     public let runningOwners: [RunningOwner]
+    public let compilerCache: URL?
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser, state: URL? = nil,
-                now: Date = Date(), runningOwners: [RunningOwner] = []) {
+                now: Date = Date(), runningOwners: [RunningOwner] = [], compilerCache: URL? = nil) {
         self.home = Files.canonicalURL(home)
         self.state = (state ?? self.home.appendingPathComponent("Library/Application Support/Bleach"))
             .absoluteURL
         self.now = now
         self.runningOwners = runningOwners
+        if let compilerCache, Files.pathIsWithin(compilerCache.path, self.home.path) {
+            self.compilerCache = compilerCache
+        } else if self.home == Files.canonicalURL(FileManager.default.homeDirectoryForCurrentUser) {
+            let capacity = Int(PATH_MAX)
+            var buffer = [CChar](repeating: 0, count: capacity)
+            if confstr(Int32(_CS_DARWIN_USER_CACHE_DIR), &buffer, capacity) > 0 {
+                let path = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+                self.compilerCache = Files.canonicalURL(URL(fileURLWithPath: path).appendingPathComponent("clang/ModuleCache"))
+            } else { self.compilerCache = nil }
+        } else { self.compilerCache = nil }
     }
     public func homeURL(_ relative: String) -> URL { home.appendingPathComponent(relative) }
 }
@@ -235,6 +250,8 @@ public struct RecoveryItem: Codable, Sendable, Identifiable {
     public var slot: String
     public var state: RecoveryState
     public var message: String?
+    public var sharedReplacement: SharedReplacement? = nil
+    public var stagedClone: StagedClone? = nil
 }
 
 public struct RecoveryBatch: Codable, Sendable, Identifiable {
@@ -295,6 +312,7 @@ public struct DuplicateReport: Codable, Sendable {
     public var filesInspected: Int
     public var filesHashed: Int
     public var bytesHashed: Int64
+    public var shareablePaths: [String]? = nil
 }
 
 public struct InstalledApp: Codable, Sendable, Identifiable {

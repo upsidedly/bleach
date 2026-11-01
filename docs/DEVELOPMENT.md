@@ -1,6 +1,6 @@
 # Development
 
-Version 0.2.0 adds shared discovery for unconfigured project artifacts, full-content expanded ZIP proofs and exact installed-app installer identity. Read [the discovery contract, resource bounds and measured coverage](DISCOVERY.md). ZIPFoundation 0.9.20 is exact-pinned; package resources and MIT notices are included by the build script. `bleach --licenses` embeds the notice for the standalone CLI.
+Version 0.3.0 adds inactive-project review, custom Swift/Next output detection, bounded local growth baselines and APFS clone sharing for generated Playwright captures. Version 0.2 added shared discovery for unconfigured project artifacts, full-content expanded ZIP proofs and exact installed-app installer identity. Read [the discovery contract, resource bounds and measured coverage](DISCOVERY.md). ZIPFoundation 0.9.20 is exact-pinned; package resources and MIT notices are included by the build script. `bleach --licenses` embeds the notice for the standalone CLI.
 
 ## Source layout
 
@@ -71,3 +71,17 @@ Storage estimates are separate from identity stamps and recursive fingerprints: 
 `~/Library/Application Support/Bleach/` is private (mode 700). Preferences store exclusions, project roots and the minimum log age (30 days by default). Earlier age values are clamped to 30 when read. Rebuildable caches are suggested at every age unless blocked or excluded. Recovery has one UUID folder per batch, private JSON manifests and UUID item slots. Journals are atomically replaced and synchronized. Reads do not create state folders or rewrite history. The same schema serves both interfaces.
 
 Version 0.1 has no daemon, scheduler, global filesystem index, database, privileged helper, telemetry, updater or network service. Add one only for an observed need. Keep user recovery and accurate reporting ahead of wider cleanup coverage.
+
+## Project activity, growth and clone sharing
+
+`InactiveProjects.swift` requires a locked reinstall recipe, complete bounded source/Git activity evidence and visible process-reference checks. Source modification, birth and ctime are considered; unknown activity retains the project. The owning repository is inspected for nested projects. Linked-worktree indirection is retained for manual review. No dependency item is auto-selected. Apply repeats activity, recipe and reference checks. `Processes.c` checks visible user-owned process working directories, executable/argument paths and vnode descriptors; arguments are not retained and environment values are not examined. Hidden or racing processes remain an OS limitation.
+
+`ProjectOutputs.swift` recognizes compiler target triples/build descriptions and Next BUILD_ID/manifests/server/static layouts. It never classifies an arbitrary build/, tmp/ or work/ tree as disposable. The exact per-user Clang ModuleCache is derived from confstr only for the real default home; fixture homes disable it unless explicitly injected inside the fixture. npx and compiler caches are retained while visibly referenced.
+
+`Growth.swift` records only explicit complete snapshots, with a private atomic JSON file capped at 2 MB, eight roots and 256 immediate children each. Read-only comparisons neither create state nor advance a baseline. Duplicate/malformed keys and partial scans cannot become successful baselines. Identity changes invalidate the old comparison. Private deltas are not free-space receipts.
+
+`StorageSharing.swift` accepts only selected full-hash duplicate captures on a cloning-capable volume. The standard Recovery write-ahead move preserves originals. Each temporary clone slot is persisted before creation. Cloning and COPYFILE_METADATA happen inside private Recovery storage; a verified clone moves exclusively into place and is verified again. Erasure rechecks the replacement and deletes only the identity-checked selected Recovery batch. Failed/recreated paths preserve originals. Undo/erasure discard only verified staged copies in that batch. This preserves data paths and independent writes without hard-link coupling; it does not promise an equal df change.
+
+Run `python3 scripts/verify-storage-workflows.py --binary build/bleach` for the additional CLI canary. Positive inactivity fixtures use the injected clock because ctime cannot be backdated. Mutation tests use disposable homes only.
+
+Prominent native buttons use `PrimaryButtonLabel` to resolve contrasting text from the SwiftUI appearance while retaining native styles, roles and shortcuts. macOS bezel tint does not also tint the label; verify enabled/disabled labels in both appearances.

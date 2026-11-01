@@ -24,6 +24,8 @@ import SwiftUI
                     Button("Scan Your Mac") { model.destination = .clean; model.scan() }.keyboardShortcut("r", modifiers: [.command, .shift]).disabled(model.isBusy)
                     Button("Find More Space") { model.destination = .clean; model.findMoreSpace() }
                         .keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model.isBusy)
+                    Button("Inactive Projects") { model.destination = .clean; model.reviewInactiveProjects() }.disabled(model.isBusy)
+                    Button("Growth") { model.destination = .growth }
                     Button("Review Selection…") { model.showReview() }.keyboardShortcut(.return, modifiers: .command).disabled(model.selectedCandidates.isEmpty || model.isBusy)
                     Divider()
                     Button("Recovery") { model.destination = .recovery }.keyboardShortcut("2", modifiers: .command)
@@ -31,6 +33,8 @@ import SwiftUI
                 }
                 if model.fixtureMode {
                     CommandMenu("Verification") {
+                        Button("Measure Fixture Growth") { model.measureGrowth(model.home.appendingPathComponent("Projects")) }.disabled(model.isBusy)
+                        Button("Compare Fixture Captures") { model.destination = .duplicates; model.compare(model.home.appendingPathComponent("Projects/Captures")) }.disabled(model.isBusy)
                         Button("Compact Window") { NSApp.keyWindow?.setContentSize(NSSize(width: 880, height: 580)) }
                             .keyboardShortcut("0", modifiers: [.command, .shift])
                         Button("Standard Window") { NSApp.keyWindow?.setContentSize(NSSize(width: 1100, height: 740)) }

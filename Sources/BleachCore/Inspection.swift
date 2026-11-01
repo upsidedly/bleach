@@ -92,7 +92,7 @@ extension BleachEngine {
         }
         let plan = CleanupPlan(createdAt: context.now, home: context.home.path, origin: "duplicates", candidates: candidates,
             issues: issues, duration: Date().timeIntervalSince(start), scannedEntries: walked.snapshot.entryCount)
-        return DuplicateReport(path: path, groups: groups, plan: plan, filesInspected: inspected, filesHashed: filesHashed, bytesHashed: bytesHashed)
+        return DuplicateReport(path: path, groups: groups, plan: plan, filesInspected: inspected, filesHashed: filesHashed, bytesHashed: bytesHashed, shareablePaths: StorageSharing.eligiblePaths(in: plan))
     }
 
     public func retaining(_ path: String, in report: DuplicateReport) throws -> DuplicateReport {
@@ -121,6 +121,7 @@ extension BleachEngine {
         if let index = result.groups.firstIndex(where: { $0.id == group.id }) {
             result.groups[index].files = [path] + group.files.filter { $0 != path }
         }
+        result.shareablePaths = StorageSharing.eligiblePaths(in: result.plan)
         return result
     }
 

@@ -154,6 +154,7 @@ extension Console {
     func menu() -> String? {
         let options = [("scan", "Clean up", "Review caches, logs, installers and developer data"),
                        ("discover", "Find More Space", "Discover project artifacts and verified expanded ZIPs"),
+                       ("inactive", "Inactive projects", "Review locked dependencies in genuinely old projects"),
                        ("analyze", "Explore space", "See what is taking up room"),
                        ("duplicates", "Find duplicates", "Compare full file contents"),
                        ("apps", "Applications", "List apps and preview removal"),
