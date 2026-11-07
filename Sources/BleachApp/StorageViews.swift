@@ -127,6 +127,9 @@ struct GroupedCleanupList: View {
                         Spacer(minLength: 5)
                         Text(Display.bytes(total(kind))).font(.subheadline).monospacedDigit()
                     }.padding(.vertical, 7)
+                        .alignmentGuide(.firstTextBaseline) { dimensions in
+                            (dimensions[.firstTextBaseline] + dimensions[.lastTextBaseline]) / 2
+                        }
                 }
             }
         }.listStyle(.inset).accessibilityIdentifier("cleanup-groups")
