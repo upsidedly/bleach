@@ -1,5 +1,21 @@
 # Verification
 
+## 0.4.0 · 7 November 2026
+
+Apple silicon, macOS 27.2, Swift 6.3.2 and the existing Command Line Tools; deployment target remains macOS 14.
+
+- **65 targeted tests passed in five suites:** cache discovery, cleanup boundaries, Recovery, output discovery and the existing archive/discovery regressions. Twelve cache cases and two added project-processing cases cover current configuration checks, undo after configuration changes, protected/case-aliased paths, overlap, installed-app profiles, archive-only boundaries, live updater references, idle projects and preservation of source/session/offline-data decoys. Fixture owner snapshots are isolated from real apps; production still refreshes owners before each move.
+- **Coverage comparison:** the installed 0.3.0 CLI found one 8 MiB cache in a disposable home. The new CLI found seven caches totaling 56 MiB private allocation, all suggested, with no scan issues. The six additional 8 MiB trees cover Cargo archives, Prisma downloads, a moved npm cache and Chromium HTTP/code/GPU caches. This is a constructed fixture, not a typical-Mac savings claim.
+- **Native interaction:** the compiled app selected all seven fixture caches and displayed 58.7 MB in decimal units. Unchecking one reduced both totals to 50.3 MB and six items. Review listed the exact seven paths; Move to Recovery moved all seven, Undo returned them, and rescan selected all seven again. The final build repeated move/undo in light appearance, with real Chrome activity isolated from the fixture. Restored payload hashes and protected decoys matched. The filled bottle mark, new rows and totals were inspected in light/standard and dark/standard/compact windows. No global appearance or access settings changed.
+- **Build:** both release products, generated icon assets, version plist and strict local code signatures passed. No new compiler warnings were reported. The shared C filesystem implementation and APFS accounting were unchanged; existing evidence for those algorithms remains historical evidence for its stated inputs.
+- **Local delivery:** installed app, embedded CLI and icon match the built 0.4.0 bundle; the previous app is backed up. The DMG checksum passed, mounted read-only and contains the same signed files plus a drag-to-Applications symlink. Its embedded CLI discovered, moved and restored both project-processing cache fixtures while preserving original assets, import settings and generated modules.
+
+Only disposable files were moved for verification. Live scans were read-only, and inaccessible app-data paths were retained. Older macOS runtimes, Intel and a full VoiceOver session were not rerun for this change. The existing local signing identity is retained; the app is not notarized.
+
+**ACCEPT** for the added macOS cache coverage, safeguards and filled icon on the tested runtime.
+
+## Earlier 0.3.0 release evidence
+
 31 October 2026. Bleach 0.3.0, Apple silicon, macOS 27.2 on Mac16,8. Apple Swift 6.3.2, selected Command Line Tools, macOS 26.5 SDK, deployment target macOS 14. No global Xcode selection or system access settings were changed.
 
 ## Automated evidence

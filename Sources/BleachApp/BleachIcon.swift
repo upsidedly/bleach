@@ -4,10 +4,6 @@ import SwiftUI
 /// A capped bleach jug with a shoulder handle and a clean-label sparkle.
 /// The same vector geometry serves the native sidebar, Dock and exported icon.
 struct BleachMark: Shape {
-    // The closed bottle/handle geometry carries more ink than its siblings;
-    // use a lighter stroke to match their perceived weight.
-    static let strokeWidth: CGFloat = 1.25
-
     func path(in rect: CGRect) -> Path {
         var path = Path()
         func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x / 24 * rect.width, y: rect.minY + y / 24 * rect.height) }
@@ -29,6 +25,7 @@ struct BleachMark: Shape {
         path.addLine(to: point(13.2, 6.2))
         path.addQuadCurve(to: point(11.1, 5.6), control: point(12.2, 5.6))
         path.addLine(to: point(11.1, 4.7))
+        path.closeSubpath()
 
         // A generous handle opening remains legible at Dock/sidebar sizes.
         path.move(to: point(12.9, 9.5))
@@ -61,8 +58,8 @@ enum BleachIcon {
         transform.concat()
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.addPath(BleachMark().path(in: CGRect(x: 0, y: 0, width: 24, height: 24)).cgPath)
-        context.setLineWidth(BleachMark.strokeWidth); context.setLineCap(.round); context.setLineJoin(.round)
-        context.setStrokeColor(color.cgColor); context.strokePath()
+        context.setFillColor(color.cgColor)
+        context.drawPath(using: .eoFill)
     }
     @MainActor static func image(size: CGFloat = 256) -> NSImage {
         NSImage(size: CGSize(width: size, height: size), flipped: false) { bounds in

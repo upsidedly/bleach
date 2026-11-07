@@ -84,7 +84,7 @@ struct Workspace: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                BleachMark().stroke(style: StrokeStyle(lineWidth: BleachMark.strokeWidth, lineCap: .round, lineJoin: .round))
+                BleachMark().fill(style: FillStyle(eoFill: true))
                     .frame(width: 23, height: 23).accessibilityHidden(true)
                 Text("Bleach").font(.title3.weight(.semibold))
                 Spacer()
