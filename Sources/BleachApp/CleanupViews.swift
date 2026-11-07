@@ -33,9 +33,6 @@ struct CleanupView: View {
                     issuesButton(plan)
                 } else {
                     VStack(alignment: .leading, spacing: 17) {
-                        if let system = model.system {
-                            DiskSpaceMeter(total: system.diskTotal, available: system.diskAvailable)
-                        }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(Display.bytes(model.selectedBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
                             VStack(alignment: .leading, spacing: 3) {

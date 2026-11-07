@@ -1,5 +1,19 @@
 # Verification
 
+## 0.5.1 · 7 November 2026
+
+Release candidate on Apple silicon, macOS 27.2 and Swift 6.3.2; macOS 14 remains the deployment target.
+
+- **Core coverage:** the full run exercised 129 tests in 13 suites. 128 passed; the active-capture test rejected an incomplete-inspection message even though the file was correctly retained. Its assertion now accepts either fail-closed diagnostic and verifies that both original payloads remain unchanged with the fixture process running. All six Sharing tests then passed. Passing evidence for the other unchanged cases is retained; process safety checks were not relaxed.
+- **CLI:** all 13 packaged-binary integration checks passed, including outside-tree APFS clone accounting, dry-run and confirmation refusal, exact permanent deletion and retained history.
+- **Artifact:** the 0.5.1 DMG passed its checksum, mounted read-only and contains the same signed app/CLI files as the build and installed bundle. Its Finder layout and drag-to-Applications target are present. The mounted CLI reports 0.5.1 and passed the full MCP stdio canary, including permission tiers, exact previews, bounds, move/restore, stale-file rejection, permanent deletion and shutdown.
+- **Local update:** the previous app was backed up. All 110 existing settings/Recovery entries remained unchanged during installation, and Auto remains off. The existing local signing identity and privacy settings were preserved.
+- **Native header:** a real read-only scan in the installed 0.5.1 app completed. The main content begins with the selected private-byte total, with no duplicate free-space meter; the sidebar retains its measured disk meter. Kind rows, centered/spaced disclosure carets, the inspector and both cleanup choices remain visible.
+
+The native workflows and platform limits recorded for 0.5.0 remain applicable. This release does not claim an exact free-space gain, per-app GPU percentages, notarization or a newly executed older-runtime matrix.
+
+**ACCEPT** for the verified 0.5.1 Apple silicon bundle and drag-and-drop DMG on this runtime.
+
 ## 0.5.0 · 7 November 2026
 
 Apple silicon M4 Pro, macOS 27.2 and Swift 6.3.2 using Command Line Tools. Deployment target remains macOS 14.

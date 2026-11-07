@@ -64,14 +64,20 @@ struct SharingTests {
         let f = try Fixture(), engine = BleachEngine(), root = try captures(f)
         let report = try await engine.duplicates(in: root, context: f.context)
         let target = try #require(report.plan.candidates.first?.path)
+        let keeper = try #require(report.plan.candidates.first?.duplicateProof?.keeperPath)
+        let original = try Data(contentsOf: URL(fileURLWithPath: target))
         let process = Process(), pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tail"); process.arguments = ["-f", target]
         process.standardOutput = pipe; process.standardError = FileHandle.nullDevice
         try process.run()
         defer { process.terminate(); process.waitUntilExit() }
         _ = try pipe.fileHandleForReading.read(upToCount: 1)
-        await reject("running process") { _ = try await engine.shareDuplicateStorage(report.plan, context: f.context) }
-        #expect(Files.exists(target))
+        #expect(process.isRunning)
+        // Both a known reference and incomplete process inspection must retain
+        // the capture; concurrent macOS process changes can produce either.
+        await reject("retained:") { _ = try await engine.shareDuplicateStorage(report.plan, context: f.context) }
+        #expect(try Data(contentsOf: URL(fileURLWithPath: target)) == original)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: keeper)) == original)
     }
 
     @Test func occupiedReplacementPathKeepsTheRecoveryOriginal() async throws {
