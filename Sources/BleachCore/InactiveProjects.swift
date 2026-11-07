@@ -16,7 +16,7 @@ enum ProjectReview {
 
     static func requireIdle(_ path: String, includeWorkingDirectory: Bool = true) throws {
         let result = bl_path_in_use(path, includeWorkingDirectory ? 1 : 0)
-        if result > 0 { throw BleachError("A running process references this project or its files; retained: \(path)") }
+        if result > 0 { throw BleachError("A running process references this item or its files; retained: \(path)") }
         if result < 0 { throw BleachError("Process references could not be fully inspected; retained: \(path)") }
     }
 

@@ -10,6 +10,7 @@ struct CandidateSeed: Sendable {
     var review: Bool = false
     var owner: String?
     var application: String?
+    var cacheProof: CacheProof? = nil
 }
 
 public actor BleachEngine {
@@ -22,8 +23,10 @@ public actor BleachEngine {
         var seeds: [CandidateSeed] = []
         var issues: [ScanIssue] = []
         var appNames: [String: String] = [:]
+        var installed: [InstalledApp] = []
         do {
-            for app in try installedApps(context: context) where appNames[app.bundleID] == nil { appNames[app.bundleID] = app.name }
+            installed = try installedApps(context: context)
+            for app in installed where appNames[app.bundleID] == nil { appNames[app.bundleID] = app.name }
         } catch { issues.append(ScanIssue(path: "/Applications", message: "App names unavailable; folder names are shown. \(error.localizedDescription)")) }
 
         func children(_ relative: String, build: (URL) -> CandidateSeed?) throws {
@@ -79,6 +82,8 @@ public actor BleachEngine {
             seeds.append(CandidateSeed(path: cache.path, title: "Clang module cache", category: .developer, rule: .clangModuleCache,
                 reason: "Compiler-generated modules in this user's macOS cache directory.", consequence: "The next compiler run rebuilds these modules. Active compiler references are retained."))
         }
+        seeds += CacheLocations.seeds(context: context).filter { Files.exists($0.path) }
+        seeds += ChromiumCaches.seeds(context: context, installed: installed)
         try children("Downloads") { url in
             guard ["dmg", "pkg", "xip"].contains(url.pathExtension.lowercased()) else { return nil }
             return CandidateSeed(path: url.path, title: url.lastPathComponent, category: .installers, rule: .installer,
@@ -100,6 +105,12 @@ public actor BleachEngine {
 
         var seen: Set<String> = []
         seeds = seeds.filter { seen.insert($0.path).inserted }
+        // Moved caches can be inside an existing cache boundary. Count and
+        // move each tree once; apply must never receive overlapping targets.
+        seeds.sort { $0.path.count == $1.path.count ? $0.path < $1.path : $0.path.count < $1.path.count }
+        var disjoint: [CandidateSeed] = []
+        for seed in seeds where !disjoint.contains(where: { Files.pathIsWithin(seed.path, $0.path) }) { disjoint.append(seed) }
+        seeds = disjoint
         // A candidate containing an exclusion is retained as a whole; moving
         // its parent must never bypass a protected descendant.
         seeds = seeds.filter { seed in
@@ -126,6 +137,7 @@ public actor BleachEngine {
                                 recommendation: seed.rule.isRebuildableCache || (stale && !seed.review) ? .suggested : .review,
                                 snapshot: snapshot, ownerBundleID: seed.owner, applicationPath: seed.application)
                             if seed.rule == .customBuildOutput { candidate.outputProjectPath = ProjectOutputs.nextProject(for: URL(fileURLWithPath: seed.path))?.path }
+                            candidate.cacheProof = seed.cacheProof
                             if !stale && !seed.rule.isRebuildableCache { candidate.reason += " Modified within the last \(days) days; review before choosing." }
                             if let busy = policy.busyReason(candidate) { candidate.recommendation = .blocked; candidate.blockedReason = busy }
                             guard policy.ruleMatches(candidate) else { return (nil, ScanIssue(path: seed.path, message: "Unrecognized cleanup boundary")) }
@@ -156,6 +168,7 @@ public actor BleachEngine {
         guard depth <= 6, !Files.pathIsWithin(root.path, context.state.path),
               !root.pathComponents.contains(".git") else { return }
         let outputs = ProjectOutputs.swiftOutputs(in: root)
+        seeds += ProjectOutputs.processingSeeds(in: root)
         for output in outputs {
             seeds.append(CandidateSeed(path: output.path, title: "\(root.lastPathComponent) / Swift output", category: .builds, rule: .customBuildOutput,
                 reason: "Compiler output identified by a Swift package, target triple and build description.", consequence: "Rebuild when returning to the project. Package checkouts and packaged apps stay.", review: true))

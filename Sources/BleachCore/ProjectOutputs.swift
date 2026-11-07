@@ -1,6 +1,30 @@
 import Foundation
 
 enum ProjectOutputs {
+    static func processingProject(for output: URL) -> URL? {
+        let container = output.deletingLastPathComponent(), project = container.deletingLastPathComponent()
+        if container.lastPathComponent == ".godot", output.lastPathComponent == "imported",
+           regular(project.appendingPathComponent("project.godot")) { return project }
+        guard container.lastPathComponent == ".contentlayer", output.lastPathComponent == ".cache",
+              ["ts", "js", "mts", "mjs", "cts", "cjs"].contains(where: { regular(project.appendingPathComponent("contentlayer.config." + $0)) }),
+              let data = try? Files.readPrivateFile(project.appendingPathComponent("package.json"), limit: 1_000_000),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let names: [String] = ["dependencies", "devDependencies"].flatMap { section in
+            (json[section] as? [String: Any])?.keys.map { $0 } ?? []
+        }
+        return Set(names).isDisjoint(with: ["contentlayer", "contentlayer2", "next-contentlayer", "next-contentlayer2"]) ? nil : project
+    }
+
+    static func processingSeeds(in project: URL) -> [CandidateSeed] {
+        [(".godot/imported", "Godot imports", "Godot reimports source assets on next open. Import settings and editor state stay. Keep these imports if the source assets are unavailable."),
+         (".contentlayer/.cache", "Contentlayer cache", "Contentlayer reprocesses source content on the next build. Generated modules and project source stay.")].compactMap { relative, title, consequence in
+            let output = project.appendingPathComponent(relative)
+            guard Files.exists(output.path), processingProject(for: output) != nil else { return nil }
+            return CandidateSeed(path: output.path, title: "\(project.lastPathComponent) / \(title)", category: .builds, rule: .projectProcessingCache,
+                reason: "Generated processing data beside its matching project manifest and configuration.", consequence: consequence, review: true)
+        }
+    }
+
     static func regular(_ url: URL, limit: Int64 = 5_000_000) -> Bool {
         guard let stamp = try? Files.stamp(url.path) else { return false }
         return stamp.kind == 1 && !stamp.dataless && stamp.size <= limit

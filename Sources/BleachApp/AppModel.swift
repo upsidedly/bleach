@@ -96,7 +96,7 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         fixtureMode = args.contains("--fixture-mode") && args.contains("--root") && home != Files.canonicalURL(FileManager.default.homeDirectoryForCurrentUser)
     }
 
-    var context: ScanContext { ScanContext(home: home, state: state, runningOwners: RunningApplications.snapshot()) }
+    var context: ScanContext { ScanContext(home: home, state: state, runningOwners: fixtureMode ? [] : RunningApplications.snapshot(), refreshRunningOwners: !fixtureMode) }
     var isBusy: Bool { work != .idle }
     var activePlan: CleanupPlan? {
         switch destination ?? .clean { case .duplicates: duplicateReport?.plan; case .applications: uninstall; default: plan }

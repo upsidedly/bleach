@@ -196,9 +196,10 @@ extension BleachEngine {
             do {
                 // Recheck after preflight and immediately before the move.
                 let currentPreferences = try PreferencesStore(context: context).load()
-                let freshOwners = await RunningApplications.snapshot()
+                let freshOwners = context.refreshRunningOwners ? await RunningApplications.snapshot() : []
                 let currentContext = ScanContext(home: context.home, state: context.state, now: context.now,
-                                                runningOwners: context.runningOwners + freshOwners, compilerCache: context.compilerCache)
+                                                runningOwners: context.runningOwners + freshOwners, compilerCache: context.compilerCache,
+                                                cacheEnvironment: context.cacheEnvironment, refreshRunningOwners: context.refreshRunningOwners)
                 let currentPolicy = CleanupPolicy(context: currentContext, preferences: currentPreferences)
                 try currentPolicy.validate(candidate)
                 guard try FileWalker.completeSnapshot(candidate.path).matchesFileState(candidate.snapshot) else {

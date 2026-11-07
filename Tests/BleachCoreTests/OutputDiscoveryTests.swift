@@ -3,6 +3,44 @@ import Testing
 @testable import BleachCore
 
 struct OutputDiscoveryTests {
+    @Test func processingCachesRequireTheirProjectsAndPreserveGeneratedModulesAndImportSettings() async throws {
+        let f = try Fixture(), engine = BleachEngine()
+        try f.write("Projects/Game/project.godot", Data("config_version=5\n[application]\nconfig/name=\"Fixture\"".utf8))
+        try f.write("Projects/Game/.godot/imported/asset.ctex")
+        let settings = try f.write("Projects/Game/art/asset.png.import")
+        let asset = try f.write("Projects/Game/art/asset.png")
+        let editor = try f.write("Projects/Game/.godot/editor/state")
+        try f.write("Projects/Web/package.json", Data("{\"dependencies\":{\"contentlayer2\":\"0.5.8\"}}".utf8))
+        try f.write("Projects/Web/contentlayer.config.ts", Data("export default {}".utf8))
+        try f.write("Projects/Web/.contentlayer/.cache/v0.5.8/processed.json")
+        let generated = try f.write("Projects/Web/.contentlayer/generated/index.js")
+        let source = try f.write("Projects/Web/content/article.md")
+        try f.write("Projects/Decoy/.contentlayer/.cache/precious")
+        try f.write("Projects/Decoy/.godot/imported/precious")
+        let plan = try await engine.discover(in: f.url("Projects"), context: f.context).plan
+        #expect(plan.candidates.count == 2)
+        #expect(plan.candidates.allSatisfy { $0.rule == .projectProcessingCache && $0.recommendation == .review })
+        let quick = try await engine.scan(context: f.context, additionalProjectRoots: [f.url("Projects")])
+        #expect(Set(quick.candidates.map(\.path)) == Set(plan.candidates.map(\.path)))
+        let batch = try await engine.apply(plan, context: f.context)
+        #expect(batch.movedCount == 2)
+        for file in [settings, asset, editor, generated, source] { #expect(Files.exists(file.path)) }
+        #expect(try await engine.restore(batch: batch.id, context: f.context).items.allSatisfy { $0.state == .restored })
+    }
+
+    @Test func activeProcessingProjectIsRetainedEvenWhenItsCacheHasNoOpenFiles() async throws {
+        let f = try Fixture(), engine = BleachEngine()
+        try f.write("Projects/Game/project.godot", Data("config_version=5".utf8))
+        try f.write("Projects/Game/.godot/imported/asset.ctex")
+        let process = Process(); process.executableURL = URL(fileURLWithPath: "/bin/sleep"); process.arguments = ["60"]
+        process.currentDirectoryURL = f.url("Projects/Game")
+        try process.run()
+        defer { if process.isRunning { process.terminate() }; process.waitUntilExit() }
+        let plan = try await engine.discover(in: f.url("Projects"), context: f.context).plan
+        #expect(plan.candidates.count == 1)
+        #expect(plan.candidates.first?.recommendation == .blocked)
+    }
+
     @Test func customOutputsAreFoundWithoutDeletingMixedBuildFolders() async throws {
         let f = try Fixture(), engine = BleachEngine()
         try f.write("Projects/Swift/Package.swift", Data("// swift-tools-version: 6.0".utf8))

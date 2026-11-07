@@ -53,6 +53,13 @@ struct CleanupPolicy {
         case .swiftPMCache: return relative == ".cache/org.swift.swiftpm"
         case .clangModuleCache: return candidate.path == context.compilerCache?.path
         case .npxCache: return relative == ".npm/_npx"
+        case .packageDownloadCache:
+            return CacheLocations.matches(candidate, context: context, restoring: restoring)
+        case .chromiumCache:
+            return ChromiumCaches.matches(candidate, context: context, restoring: restoring)
+        case .projectProcessingCache:
+            guard let project = ProjectOutputs.processingProject(for: url) else { return false }
+            return Files.pathIsWithin(project.path, context.home.path) && !protectedUserPath(project.path)
         case .inactiveDependencies:
             guard Files.pathIsWithin(parent, context.home.path), !protectedUserPath(parent),
                   ["node_modules", ".venv", "venv"].contains(name), candidate.projectEvidence != nil else { return false }
@@ -97,15 +104,24 @@ struct CleanupPolicy {
     }
 
     func busyReason(_ candidate: CleanupCandidate) -> String? {
-        if [.clangModuleCache, .npxCache, .customBuildOutput].contains(candidate.rule) {
+        if candidate.rule == .projectProcessingCache, let project = ProjectOutputs.processingProject(for: URL(fileURLWithPath: candidate.path)) {
+            do { try ProjectReview.requireIdle(project.path) }
+            catch { return error.localizedDescription }
+        }
+        if candidate.rule.isRebuildableCache || candidate.rule == .customBuildOutput {
             do { try ProjectReview.requireIdle(candidate.path, includeWorkingDirectory: true) }
             catch { return error.localizedDescription }
+        }
+        if candidate.rule == .chromiumCache, candidate.path == ChromiumCaches.updaterCache(context) {
+            do { try ProjectReview.requireIdle(ChromiumCaches.updaterExecutables(context)) }
+            catch { return error.localizedDescription }
+            if context.runningOwners.contains(where: { $0.bundleID.hasPrefix("com.google.GoogleUpdater") }) { return "Google Updater is running" }
         }
         let name = URL(fileURLWithPath: candidate.path).lastPathComponent
         let inferred = candidate.rule == .userCache || candidate.rule == .log ? name : candidate.ownerBundleID
         for owner in context.runningOwners {
             if candidate.rule == .application && owner.applicationPath == candidate.path { return "Quit the app before removing it" }
-            if let id = candidate.ownerBundleID, id == owner.bundleID { return "The owning app is running" }
+            if let id = candidate.ownerBundleID, id == owner.bundleID || owner.bundleID.hasPrefix(id + ".") { return "The owning app is running" }
             if let inferred, inferred == owner.bundleID || owner.bundleID.hasPrefix(inferred + ".") { return "The owning app is running" }
             if candidate.rule == .userCache {
                 let aliases = ["Google": "com.google.", "Firefox": "org.mozilla.", "Microsoft": "com.microsoft.", "Homebrew": "org.homebrew."]
@@ -131,7 +147,8 @@ struct CleanupPolicy {
     }
 
     func isProtectedCache(_ name: String) -> Bool {
-        name.hasPrefix("com.apple.") || ["CloudKit", "CloudKitMetadata", "CloudDocs", "com.apple.bird", "Metadata", "Bleach"].contains(name)
+        let name = name.lowercased()
+        return name.hasPrefix("com.apple.") || ["cloudkit", "cloudkitmetadata", "clouddocs", "com.apple.bird", "metadata", "bleach", "uv", "pnpm", "bun", "yarn"].contains(name)
     }
 
     static func projectArtifactMatches(_ url: URL) -> Bool {

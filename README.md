@@ -19,13 +19,17 @@ On first use, macOS may ask to access Downloads while looking for installers. Re
 
 Select a row to see its path, size, why it was found and what removing it changes. **Review Cleanup…** shows the exact selection before moving it to **Recovery**.
 
+The scan also finds HTTP, compiled-code and shader caches inside supported installed apps, including Chrome, Arc, Brave, Edge, Figma, Notion, Slack, Discord and T3 Code. Chromium component/extension download archives and Google update payloads are separate from installed copies. Browser sessions, cookies, service-worker storage, offline documents and app databases stay. Running apps, helpers, updater executables and visible process references keep their caches unselected.
+
+Developer coverage includes Cargo download archives and Prisma engine downloads, plus npm/npx, pip, Gradle and Go caches moved through supported user configuration or environment variables. Configured paths are checked again before cleanup. Known uv, Bun, pnpm and Yarn cache directories are retained; these stores can supply installed environments directly. Unsupported layouts and inaccessible app caches stay in place.
+
 Recovery keeps files on disk. Restore a batch to put its files back, or choose **Delete Permanently…** to remove them. Blocks shared with another file or snapshot may remain. Bleach never empties your Mac’s Trash. A recreated original path is kept alongside the recovery copy until you resolve the conflict.
 
 ## Find more space
 
 Choose **Find More Space → Generated Outputs & Archives** after a scan, or press **⇧⌘F**. It adds evidence-backed items to the same review:
 
-- **Project outputs:** discovers dependency/build folders beside matching manifests, Swift compiler output under custom `build/spm`, `build/tests` and `build/checks` scratch paths, and custom Next.js output identified by build markers. Swift checkouts, mixed media folders and packaged apps stay in place; each output needs your choice.
+- **Project outputs:** discovers dependency/build folders beside matching manifests, Swift compiler output under custom `build/spm`, `build/tests` and `build/checks` scratch paths, and custom Next.js output identified by build markers. It also reviews Contentlayer's processing cache and Godot's imported resources beside matching project files. Swift checkouts, generated Contentlayer modules, Godot import settings, mixed media folders and packaged apps stay in place; each output needs your choice.
 - **Already expanded ZIPs:** checks every supported archived file against its adjacent expanded folder with full SHA-256 and ZIP integrity checks. This finds redundant compressed copies that ordinary duplicate-file hashes miss.
 - **Already-installed app installers:** matches a ZIP app installer or an already-mounted DMG to an installed app by bundle ID, version and build. A matching filename is insufficient. Different versions remain unmarked; offline backups can still be worth keeping.
 

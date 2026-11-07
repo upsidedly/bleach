@@ -13,7 +13,7 @@ final class Fixture: Sendable {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
     }
     deinit { try? FileManager.default.removeItem(at: root) }
-    var context: ScanContext { ScanContext(home: root, now: now) }
+    var context: ScanContext { ScanContext(home: root, now: now, refreshRunningOwners: false) }
     func url(_ path: String) -> URL { root.appendingPathComponent(path) }
     @discardableResult func write(_ path: String, _ data: Data = Data(repeating: 37, count: 8192)) throws -> URL {
         let destination = url(path)

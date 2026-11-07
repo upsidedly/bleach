@@ -43,6 +43,15 @@ extension BleachEngine {
                   stamp.owner == getuid(), stamp.device == device, seen.insert(stamp.identity).inserted else { continue }
             directories += 1
             do {
+                for seed in ProjectOutputs.processingSeeds(in: directory) where policy.exclusionReason(seed.path) == nil {
+                    let snapshot = try FileWalker.completeSnapshot(seed.path, deadline: start.addingTimeInterval(limits.seconds))
+                    guard snapshot.allocatedBytes > 0 else { continue }
+                    var candidate = CleanupCandidate(path: seed.path, title: seed.title, category: seed.category, rule: seed.rule,
+                        reason: seed.reason, consequence: seed.consequence, recommendation: .review, snapshot: snapshot)
+                    if let busy = policy.busyReason(candidate) { candidate.recommendation = .blocked; candidate.blockedReason = busy }
+                    candidates.append(candidate)
+                    projects.insert(directory.path); scannedEntries += snapshot.entryCount
+                }
                 let swiftOutputs = ProjectOutputs.swiftOutputs(in: directory)
                 for output in swiftOutputs where policy.exclusionReason(output.path) == nil {
                     let snapshot = try FileWalker.completeSnapshot(output.path, deadline: start.addingTimeInterval(limits.seconds))

@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 public enum BleachVersion {
-    public static let current = "0.3.0"
+    public static let current = "0.4.0"
     public static let planSchema = 1
 }
 
@@ -91,9 +91,11 @@ public enum RuleID: String, Codable, Sendable {
     case userCache, log, xcodeDerivedData, npmCache, pipCache, gradleCache, swiftPMCache
     case projectArtifact, installer, application, appRelatedData, duplicate, expandedArchive, archivedInstaller
     case inactiveDependencies, customBuildOutput, clangModuleCache, npxCache
+    case packageDownloadCache, chromiumCache
+    case projectProcessingCache
     public var isRebuildableCache: Bool {
         switch self {
-        case .userCache, .xcodeDerivedData, .npmCache, .pipCache, .gradleCache, .swiftPMCache, .clangModuleCache, .npxCache: true
+        case .userCache, .xcodeDerivedData, .npmCache, .pipCache, .gradleCache, .swiftPMCache, .clangModuleCache, .npxCache, .packageDownloadCache, .chromiumCache: true
         default: false
         }
     }
@@ -130,6 +132,12 @@ public struct InstallerProof: Codable, Sendable, Equatable {
     public var sourceInfoPath: String
 }
 
+public struct CacheProof: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable { case npm, npx, pip, gradle, cargoArchives, prisma, goBuild }
+    public var kind: Kind
+    public var root: String
+}
+
 public struct CleanupCandidate: Codable, Sendable, Identifiable {
     public var id: String { path }
     public var path: String
@@ -148,6 +156,7 @@ public struct CleanupCandidate: Codable, Sendable, Identifiable {
     public var installerProof: InstallerProof?
     public var projectEvidence: ProjectEvidence? = nil
     public var outputProjectPath: String? = nil
+    public var cacheProof: CacheProof? = nil
     public var allocatedBytes: Int64 { snapshot.allocatedBytes }
     public var storage: StorageUsage { snapshot.storageUsage }
     public var privateBytes: Int64 { storage.privateBytes }
@@ -219,13 +228,20 @@ public struct ScanContext: Sendable {
     public let now: Date
     public let runningOwners: [RunningOwner]
     public let compilerCache: URL?
+    public let cacheEnvironment: [String: String]
+    public let refreshRunningOwners: Bool
     public init(home: URL = FileManager.default.homeDirectoryForCurrentUser, state: URL? = nil,
-                now: Date = Date(), runningOwners: [RunningOwner] = [], compilerCache: URL? = nil) {
+                now: Date = Date(), runningOwners: [RunningOwner] = [], compilerCache: URL? = nil, cacheEnvironment: [String: String]? = nil,
+                refreshRunningOwners: Bool = true) {
         self.home = Files.canonicalURL(home)
         self.state = (state ?? self.home.appendingPathComponent("Library/Application Support/Bleach"))
             .absoluteURL
         self.now = now
         self.runningOwners = runningOwners
+        self.refreshRunningOwners = refreshRunningOwners
+        // Fixture homes never inherit the operator's tool/cache locations.
+        self.cacheEnvironment = cacheEnvironment ?? (self.home == Files.canonicalURL(FileManager.default.homeDirectoryForCurrentUser)
+            ? ProcessInfo.processInfo.environment.filter { CacheLocations.environmentKeys.contains($0.key) } : [:])
         if let compilerCache, Files.pathIsWithin(compilerCache.path, self.home.path) {
             self.compilerCache = compilerCache
         } else if self.home == Files.canonicalURL(FileManager.default.homeDirectoryForCurrentUser) {
