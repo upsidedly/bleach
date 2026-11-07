@@ -4,6 +4,7 @@ import SwiftUI
 
 @main struct BleachApp: App {
     @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(BleachAppDelegate.self) private var appDelegate
     init() {
         NSApplication.shared.applicationIconImage = BleachIcon.image()
         if let index = CommandLine.arguments.firstIndex(of: "--appearance"), index + 1 < CommandLine.arguments.count {
@@ -21,12 +22,15 @@ import SwiftUI
                         .disabled(model.latestRecoverable == nil || model.isBusy)
                 }
                 CommandMenu("Cleanup") {
+                    Button("Actions…") { model.showCommands = true }.keyboardShortcut("k", modifiers: .command)
+                    Button("Menu Bar Cleanup") { model.menuBar?.show() }.keyboardShortcut("m", modifiers: [.command, .shift])
                     Button("Scan Your Mac") { model.destination = .clean; model.scan() }.keyboardShortcut("r", modifiers: [.command, .shift]).disabled(model.isBusy)
                     Button("Find More Space") { model.destination = .clean; model.findMoreSpace() }
                         .keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model.isBusy)
                     Button("Inactive Projects") { model.destination = .clean; model.reviewInactiveProjects() }.disabled(model.isBusy)
                     Button("Growth") { model.destination = .growth }
                     Button("Review Selection…") { model.showReview() }.keyboardShortcut(.return, modifiers: .command).disabled(model.selectedCandidates.isEmpty || model.isBusy)
+                    Button("Delete Selection Permanently…", role: .destructive) { model.showReview(permanently: true) }.disabled(model.selectedCandidates.isEmpty || model.isBusy)
                     Divider()
                     Button("Recovery") { model.destination = .recovery }.keyboardShortcut("2", modifiers: .command)
                     Button("Clean up") { model.destination = .clean }.keyboardShortcut("1", modifiers: .command)
@@ -44,4 +48,8 @@ import SwiftUI
             }
         Settings { SettingsView(model: model).tint(.primary) }
     }
+}
+
+@MainActor final class BleachAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }

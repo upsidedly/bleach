@@ -38,6 +38,13 @@ void bl_close(int descriptor);
 int bl_last_error(void);
 /* 1 in use, 0 no visible reference, negative errno when inspection is partial. */
 int bl_path_in_use(const char *path, int include_cwd);
+typedef struct {
+    int32_t pid, parent_pid;
+    uint64_t started, cpu_nanoseconds, footprint;
+    char name[128];
+} BLProcessSample;
+int bl_process_sample(int32_t pid, BLProcessSample *out);
+int bl_process_samples(BLProcessSample *out, size_t capacity);
 int bl_clone_copy(const char *keeper, const BLStat *keeper_stat, const char *metadata_source, const BLStat *metadata_stat, const char *destination);
 
 typedef struct {

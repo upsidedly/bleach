@@ -17,7 +17,7 @@ enum Destination: String, CaseIterable, Identifiable {
 }
 
 enum Work: String {
-    case idle, scanning, discovering, inactive, measuringGrowth, sharing, analyzing, comparing, loadingApps, planningRemoval, moving, restoring, erasing, saving
+    case idle, scanning, discovering, inactive, measuringGrowth, sharing, analyzing, comparing, loadingApps, planningRemoval, moving, deleting, automatic, restoring, erasing, saving
     var label: String {
         switch self {
         case .idle: ""
@@ -31,15 +31,19 @@ enum Work: String {
         case .loadingApps: "Reading applications…"
         case .planningRemoval: "Reviewing the app’s files…"
         case .moving: "Moving selected files to recovery…"
+        case .deleting: "Deleting the reviewed selection…"
+        case .automatic: "Clearing unused package downloads and old logs…"
         case .restoring: "Restoring files…"
         case .erasing: "Deleting this recovery batch…"
         case .saving: "Saving…"
         }
     }
-    var cancellable: Bool { [.scanning, .discovering, .inactive, .measuringGrowth, .analyzing, .comparing, .loadingApps, .planningRemoval].contains(self) }
+    var cancellable: Bool { [.scanning, .discovering, .inactive, .measuringGrowth, .analyzing, .comparing, .loadingApps, .planningRemoval, .automatic].contains(self) }
 }
 
 enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Suggested", review = "Review", inUse = "In use" }
+enum MenuBarPresentation: Equatable { case hidden, popover, panel }
+enum ResourceMetric: String, CaseIterable { case memory = "Memory", cpu = "CPU", gpu = "GPU" }
 
 @MainActor @Observable final class AppModel {
     let engine = BleachEngine()
@@ -57,9 +61,30 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
     var filter = CandidateFilter.all
     var search = ""
     var category: CleanupCategory?
+    var cleanupLevel = CleanupLevel.balanced
+    var groupCleanup = true
+    var showCommands = false
     var showInspector = true
     var sortOrder = [KeyPathComparator(\CleanupCandidate.privateBytes, order: .reverse)]
     var review: CleanupPlan?
+    var reviewFromMenu = false
+    var reviewPermanently = false
+    var quitRequest: ProcessUsage?
+    var pendingQuit: ProcessUsage?
+    var statusMessage: String?
+    var processes: [ProcessUsage] = []
+    var appProcesses: [ProcessUsage] = []
+    var appIcons: [Int32: NSImage] = [:]
+    var resourceMetric = ResourceMetric.memory
+    var menuBarPresentation = MenuBarPresentation.hidden
+    @ObservationIgnored var menuBar: MenuBarController?
+    var processIssue: String?
+    let processMonitor = ProcessMonitor()
+    var autoStatus = "Off"
+    var autoCheckedAt: Date?
+    @ObservationIgnored private var maintenance: Task<Void, Never>?
+    @ObservationIgnored private var didLoad = false
+    @ObservationIgnored private var samplingSystem = false
     var lastBatch: RecoveryBatch?
     var batches: [RecoveryBatch] = []
     var selectedBatch: UUID?
@@ -128,13 +153,17 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
     var latestRecoverable: RecoveryBatch? { batches.first { !$0.recoverable.isEmpty } }
 
     func load() async {
+        guard !didLoad else { return }
+        didLoad = true
         do {
             preferences = try await engine.preferences(context: context)
+            autoStatus = automaticStatus(for: automaticSettings)
             batches = try await engine.history(context: context)
             system = try await SystemReader.sample(at: home)
         } catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }
         if CommandLine.arguments.contains("--auto-scan") { scan() }
+        startMaintenance()
     }
 
     private func perform(_ action: Work, _ body: @escaping @MainActor () async throws -> Void) {
@@ -145,7 +174,12 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         job = Task { [weak self] in
             do { try await body() }
             catch is CancellationError { /* Cancellation is a user outcome, not an error. */ }
-            catch { if self?.revision == current { self?.errorMessage = error.localizedDescription } }
+            catch {
+                if self?.revision == current {
+                    self?.errorMessage = error.localizedDescription
+                    if action == .automatic { self?.autoStatus = "Stopped; review the error" }
+                }
+            }
             guard let self, self.revision == current else { return }
             self.work = .idle; self.job = nil
         }
@@ -153,6 +187,7 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
 
     func cancel() {
         guard work.cancellable else { return }
+        if work == .automatic { autoStatus = "Stopped"; statusMessage = "Automatic cleanup stopped. Inspect Recovery for any retained files." }
         job?.cancel(); job = nil; revision += 1; work = .idle
     }
 
@@ -161,6 +196,7 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
             let result = try await engine.scan(context: context)
             try Task.checkCancellation()
             plan = result; selectedPaths = Set(result.suggested.map(\.path)); focusedCandidate = result.candidates.first?.path
+            cleanupLevel = .balanced
             discovery = nil; discoveredPaths = []
             lastBatch = nil
             filter = .all; search = ""; category = nil
@@ -246,20 +282,28 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
 
     func toggle(_ candidate: CleanupCandidate, selected: Bool) {
         guard candidate.recommendation != .blocked else { return }
+        cleanupLevel = .custom
         if selected { activeSelection.insert(candidate.path) } else { activeSelection.remove(candidate.path) }
     }
 
-    func showReview() {
+    func selectLevel(_ level: CleanupLevel) {
+        guard level != .custom, let plan else { return }
+        selectedPaths = Set(plan.candidates.filter { level.includes($0) }.map(\.path))
+        cleanupLevel = level
+    }
+
+    func showReview(permanently: Bool = false, fromMenu: Bool = false) {
         guard let activePlan, !selectedCandidates.isEmpty else { return }
+        reviewFromMenu = fromMenu; reviewPermanently = permanently
         review = activePlan.selecting(activeSelection)
     }
 
-    func applyReview() {
+    func applyReview(permanently: Bool = false) {
         guard let preview = review else { return }
         review = nil
-        perform(.moving) { [self] in
-            let result = try await engine.apply(preview, context: context)
-            let completed = Set(result.items.filter { $0.state == .moved }.map { $0.candidate.path })
+        perform(permanently ? .deleting : .moving) { [self] in
+            let result = try await (permanently ? engine.deletePermanently(preview, context: context) : engine.apply(preview, context: context))
+            let completed = Set(result.items.filter { $0.state == .moved || $0.state == .erased }.map { $0.candidate.path })
             plan?.candidates.removeAll { completed.contains($0.path) }
             duplicateReport?.plan.candidates.removeAll { completed.contains($0.path) }
             uninstall?.candidates.removeAll { completed.contains($0.path) }
@@ -268,6 +312,9 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
             focusedCandidate = nil; lastBatch = result; selectedBatch = result.id
             batches = try await engine.history(context: context)
             system = try await SystemReader.sample(at: home)
+            if permanently {
+                statusMessage = "\(Display.items(result.items.filter { $0.state == .erased }.count)) permanently deleted\(result.recoverable.isEmpty ? "" : "; review retained items in Recovery")."
+            }
         }
     }
 
@@ -349,6 +396,9 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         perform(.saving) { [self] in
             let needsRescan = value.minimumAgeDays != preferences.minimumAgeDays || value.projectRoots != preferences.projectRoots
             try await engine.updatePreferences(value, context: context)
+            if value.automaticCleanup != preferences.automaticCleanup {
+                autoStatus = automaticStatus(for: value.automaticCleanup ?? AutomaticCleanupSettings())
+            }
             preferences = value
             if needsRescan { plan = nil; selectedPaths = [] }
             else {
@@ -393,11 +443,110 @@ enum CandidateFilter: String, CaseIterable { case all = "All", suggested = "Sugg
         }
     }
     func sampleSystem() async {
+        guard !samplingSystem else { return }
+        samplingSystem = true
+        defer { samplingSystem = false }
         do {
             let sample = try await SystemReader.sample(at: home)
             try Task.checkCancellation()
             system = sample
         } catch is CancellationError { return }
         catch { errorMessage = error.localizedDescription }
+    }
+
+    func sampleProcesses() async {
+        do {
+            let values = try await processMonitor.sample()
+            try Task.checkCancellation()
+            processes = values; appProcesses = ProcessControl.groupedApplications(values); processIssue = nil
+            if let pending = pendingQuit, !values.contains(where: { $0.id == pending.id }) {
+                statusMessage = "\(pending.name) quit · \(Display.bytes(Int64(clamping: pending.memoryBytes))) last measured footprint."
+                pendingQuit = nil
+            }
+            appIcons = Dictionary(uniqueKeysWithValues: appProcesses.compactMap { process in
+                NSRunningApplication(processIdentifier: process.pid)?.icon.map { (process.pid, $0) }
+            })
+        } catch is CancellationError { return }
+        catch { processIssue = error.localizedDescription }
+    }
+
+    func canQuit(_ process: ProcessUsage) -> Bool {
+        guard let app = ProcessControl.application(for: process) else { return false }
+        return !fixtureMode || app.bundleURL.map { Files.pathIsWithin($0.path, home.path) } == true
+    }
+
+    func quit(_ process: ProcessUsage, force: Bool = false) {
+        guard canQuit(process) else { return }
+        do {
+            try ProcessControl.quit(process, force: force)
+            pendingQuit = process
+            statusMessage = force ? "Force quit requested for \(process.name)." : "Quit requested for \(process.name). Unsaved changes may need your attention."
+        } catch { errorMessage = error.localizedDescription }
+        quitRequest = nil
+    }
+
+    var automaticSettings: AutomaticCleanupSettings { preferences.automaticCleanup ?? AutomaticCleanupSettings() }
+
+    private func automaticStatus(for settings: AutomaticCleanupSettings) -> String {
+        guard settings.enabled else { return "Off" }
+        if let until = settings.pausedUntil, until > Date() {
+            return "Paused until \(until.formatted(date: .omitted, time: .shortened))"
+        }
+        return "Waiting for the next check"
+    }
+
+    func updateAutomatic(_ edit: (inout AutomaticCleanupSettings) -> Void) {
+        var updated = preferences
+        var settings = automaticSettings; edit(&settings)
+        updated.automaticCleanup = settings; savePreferences(updated)
+    }
+
+    func checkAutomaticCleanup() {
+        guard !isBusy, review == nil, sharingRequest == nil else { return }
+        let settings = automaticSettings
+        guard settings.enabled else { autoStatus = "Off"; return }
+        if let until = settings.pausedUntil, until > Date() { autoStatus = "Paused until \(until.formatted(date: .omitted, time: .shortened))"; return }
+        let capacity = SystemReader.disk(at: home)
+        guard settings.shouldRun(total: capacity.total, available: capacity.available, now: Date()) else {
+            autoStatus = capacity.available < 0 ? "Disk space unavailable" : "Above the free-space threshold"
+            autoCheckedAt = Date(); return
+        }
+        perform(.automatic) { [self] in
+            autoStatus = "Checking unused package downloads and old logs…"
+            let batch = try await engine.automaticCleanup(context: context)
+            autoCheckedAt = Date()
+            if let batch {
+                batches = try await engine.history(context: context)
+                let paths = Set(batch.items.filter { $0.state == .erased || $0.state == .moved }.map { $0.candidate.path })
+                plan?.candidates.removeAll { paths.contains($0.path) }; selectedPaths.subtract(paths)
+                autoStatus = "\(Display.items(batch.items.filter { $0.state == .erased }.count)) cleared\(batch.problemCount > 0 ? "; inspect Recovery" : "")"
+                statusMessage = "Auto cleanup: \(autoStatus.lowercased())."
+            } else { autoStatus = "No eligible unused downloads or old logs" }
+            system = try await SystemReader.sample(at: home)
+        }
+    }
+
+    private func startMaintenance() {
+        guard maintenance == nil else { return }
+        // One app-owned loop continues when the main window closes; it never
+        // launches at login or changes a system setting. Closing Bleach ends it.
+        maintenance = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
+                guard let self else { return }
+                await self.sampleSystem()
+                self.checkAutomaticCleanup()
+            }
+        }
+    }
+
+    func copyAgentReport() {
+        let lines = (plan?.candidates ?? []).prefix(100).map {
+            "- \($0.kind.title): \($0.title) — \(Display.bytes($0.privateBytes)) private, \($0.recommendation.label). \($0.consequence)"
+        }
+        let report = (["Bleach local cleanup report", "Private allocation is not a free-space promise. Recovery moves free no space. Preserve chat history, source, Git and active projects.",
+                       system.map { "Disk: \(Display.bytes($0.diskAvailable)) free of \(Display.bytes($0.diskTotal))." } ?? "Disk unavailable."] + lines).joined(separator: "\n")
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(report, forType: .string)
+        statusMessage = "Cleanup report copied. Paste it into your agent to discuss the options."
     }
 }

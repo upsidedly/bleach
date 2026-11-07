@@ -17,6 +17,10 @@ public actor BleachEngine {
     public init() {}
 
     public func scan(context: ScanContext, additionalProjectRoots: [URL] = []) async throws -> CleanupPlan {
+        try await scan(context: context, additionalProjectRoots: additionalProjectRoots, automaticOnly: false)
+    }
+
+    func scan(context: ScanContext, additionalProjectRoots: [URL] = [], automaticOnly: Bool) async throws -> CleanupPlan {
         let start = Date()
         let preferences = try PreferencesStore(context: context).load()
         let policy = CleanupPolicy(context: context, preferences: preferences)
@@ -25,11 +29,12 @@ public actor BleachEngine {
         var appNames: [String: String] = [:]
         var installed: [InstalledApp] = []
         do {
-            installed = try installedApps(context: context)
+            installed = automaticOnly ? [] : try installedApps(context: context)
             for app in installed where appNames[app.bundleID] == nil { appNames[app.bundleID] = app.name }
         } catch { issues.append(ScanIssue(path: "/Applications", message: "App names unavailable; folder names are shown. \(error.localizedDescription)")) }
 
         func children(_ relative: String, build: (URL) -> CandidateSeed?) throws {
+            if automaticOnly && !["Library/Logs", "Library/Logs/DiagnosticReports"].contains(relative) { return }
             let url = context.homeURL(relative)
             guard Files.exists(url.path) else { return }
             do {
@@ -42,6 +47,7 @@ public actor BleachEngine {
         }
 
         try children("Library/Caches") { url in
+            guard !automaticOnly else { return nil }
             let name = url.lastPathComponent
             guard !name.hasPrefix("."), !policy.isProtectedCache(name) else { return nil }
             let browser = ["Google", "Firefox", "com.google.Chrome", "com.microsoft.Edge", "com.brave.Browser", "company.thebrowser.Browser", "company.thebrowser.dia"].contains(name)
@@ -62,6 +68,7 @@ public actor BleachEngine {
                 reason: "A saved crash or diagnostic report.", consequence: "The report will no longer be available for troubleshooting.")
         }
         try children("Library/Developer/Xcode/DerivedData") { url in
+            guard !automaticOnly else { return nil }
             guard !url.lastPathComponent.hasPrefix(".") else { return nil }
             return CandidateSeed(path: url.path, title: url.lastPathComponent, category: .developer,
                 rule: .xcodeDerivedData, reason: "Xcode build products and indexes; not project source.",
@@ -78,13 +85,14 @@ public actor BleachEngine {
             seeds.append(CandidateSeed(path: context.homeURL(relative).path, title: title, category: .developer,
                 rule: rule, reason: "Downloaded package data; installed project dependencies are separate.", consequence: consequence, review: true))
         }
-        if let cache = context.compilerCache, Files.exists(cache.path) {
+        if !automaticOnly, let cache = context.compilerCache, Files.exists(cache.path) {
             seeds.append(CandidateSeed(path: cache.path, title: "Clang module cache", category: .developer, rule: .clangModuleCache,
                 reason: "Compiler-generated modules in this user's macOS cache directory.", consequence: "The next compiler run rebuilds these modules. Active compiler references are retained."))
         }
         seeds += CacheLocations.seeds(context: context).filter { Files.exists($0.path) }
-        seeds += ChromiumCaches.seeds(context: context, installed: installed)
+        if !automaticOnly { seeds += ChromiumCaches.seeds(context: context, installed: installed) }
         try children("Downloads") { url in
+            guard !automaticOnly else { return nil }
             guard ["dmg", "pkg", "xip"].contains(url.pathExtension.lowercased()) else { return nil }
             return CandidateSeed(path: url.path, title: url.lastPathComponent, category: .installers, rule: .installer,
                 reason: "A downloaded installer. Bleach cannot tell whether you still need it.",
@@ -92,7 +100,7 @@ public actor BleachEngine {
         }
 
         let configured = preferences.projectRoots.map { URL(fileURLWithPath: $0) }
-        for suppliedRoot in configured + additionalProjectRoots {
+        for suppliedRoot in automaticOnly ? [] : configured + additionalProjectRoots {
             let root = Files.canonicalURL(suppliedRoot)
             guard Files.pathIsWithin(root.path, context.home.path),
                   !policy.protectedUserPath(root.path) else {
@@ -103,6 +111,17 @@ public actor BleachEngine {
             catch { issues.append(ScanIssue(path: root.path, message: error.localizedDescription)) }
         }
 
+        if automaticOnly {
+            seeds = seeds.filter { seed in
+                if seed.rule == .log || seed.rule == .npmCache { return true }
+                guard seed.rule == .packageDownloadCache, let proof = seed.cacheProof else { return false }
+                switch proof.kind {
+                case .npm, .cargoArchives: return true
+                case .pip: return ["http", "http-v2", "selfcheck"].contains(URL(fileURLWithPath: seed.path).lastPathComponent)
+                default: return false
+                }
+            }
+        }
         var seen: Set<String> = []
         seeds = seeds.filter { seen.insert($0.path).inserted }
         // Moved caches can be inside an existing cache boundary. Count and

@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 public enum BleachVersion {
-    public static let current = "0.4.0"
+    public static let current = "0.5.0"
     public static let planSchema = 1
 }
 
@@ -210,6 +210,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var excludedPaths: [String] = []
     public var projectRoots: [String] = []
     public var minimumAgeDays: Int = 30
+    public var automaticCleanup: AutomaticCleanupSettings? = nil
     public init() {}
     public func excludes(_ path: String) -> Bool {
         excludedPaths.contains { Files.pathIsWithin(path, $0) || Files.pathIsWithin($0, path) }
@@ -351,6 +352,9 @@ public struct SystemSnapshot: Codable, Sendable {
     public var memoryCompressed: UInt64
     public var swapUsed: UInt64?
     public var cpuPercent: Double?
+    public var gpuPercent: Double? = nil
+    public var gpuMemoryAllocated: Int64? = nil
+    public var gpuMemoryInUse: Int64? = nil
     public var processorCount: Int
     public var uptime: Double
     public var hostname: String

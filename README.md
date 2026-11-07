@@ -17,13 +17,31 @@ Open Bleach and choose **Scan Your Mac**. Scanning changes nothing. Rebuildable 
 
 On first use, macOS may ask to access Downloads while looking for installers. Respond to that system dialog to let the scan continue, or cancel the scan in Bleach.
 
-Select a row to see its path, size, why it was found and what removing it changes. **Review Cleanup…** shows the exact selection before moving it to **Recovery**.
+Expand a kind or switch to the item table to inspect paths, sizes and consequences. Distinct coloured SF Symbols identify each kind of storage. The segmented meter shows measured volume space; the selected private-byte total stays separate.
+
+Choose **Light**, **Balanced** or **Thorough**, or select items yourself. Thorough includes generated output but keeps project dependencies, installers and personal data manual. **Review Cleanup…** shows the exact selection. Choose **Move to Recovery** for Undo, or **Delete Permanently…** for an irreversible deletion of those items. Existing Recovery batches stay.
 
 The scan also finds HTTP, compiled-code and shader caches inside supported installed apps, including Chrome, Arc, Brave, Edge, Figma, Notion, Slack, Discord and T3 Code. Chromium component/extension download archives and Google update payloads are separate from installed copies. Browser sessions, cookies, service-worker storage, offline documents and app databases stay. Running apps, helpers, updater executables and visible process references keep their caches unselected.
 
 Developer coverage includes Cargo download archives and Prisma engine downloads, plus npm/npx, pip, Gradle and Go caches moved through supported user configuration or environment variables. Configured paths are checked again before cleanup. Known uv, Bun, pnpm and Yarn cache directories are retained; these stores can supply installed environments directly. Unsupported layouts and inaccessible app caches stay in place.
 
 Recovery keeps files on disk. Restore a batch to put its files back, or choose **Delete Permanently…** to remove them. Blocks shared with another file or snapshot may remain. Bleach never empties your Mac’s Trash. A recreated original path is kept alongside the recovery copy until you resolve the conflict.
+
+## Menu bar and quick actions
+
+The bottle in the menu bar opens a compact disk and resource panel. Scan, choose kinds, review exact items and move or permanently delete them there. Undo is available in the panel. The main window and menu bar share the same selection and history. **⇧⌘M** also opens these controls in a native panel, including on desktops without a usable menu-bar anchor.
+
+Press **⌘K** to find actions, quit an app, review an uninstall, or copy a cleanup report for your agent. Force Quit has a separate warning about unsaved changes. **System** groups apps with their visible helper processes and ranks them by memory footprint or CPU. The GPU reading and driver memory counters are whole-device and remain unavailable when the driver provides none; per-app GPU percentages are unavailable. Bleach never quits apps automatically or claims to purge memory.
+
+## Automatic cleanup
+
+Auto mode starts **off**. Enable it in Settings only after accepting permanent deletion, then choose a free-space threshold in GB or percent. While Bleach is open, it checks once a minute and clears at most 32 eligible items / 8 GB per pass: unused raw npm/Cargo archives, pip HTTP downloads and logs unchanged for at least 90 days. You can pause it for an hour or disable either kind.
+
+Generic app/browser caches, compiler/build output, installed dependencies, installers, source, Git, chat history and existing Recovery batches are excluded. In-use, excluded, shared, hard-linked and unverified files stay. Downloads may need an internet connection again. Automatic passes use a narrow scan without walking your project folders; they do not promise to reach a threshold when no eligible files remain.
+
+## Connect an agent
+
+`bleach mcp` starts a local read-only MCP server. Settings can copy a Claude configuration or Codex setup command. Optional flags expose exact-preview Recovery actions and, separately, permanent deletion. See [MCP setup, tools and approval boundaries](docs/MCP.md).
 
 ## Find more space
 
@@ -79,6 +97,8 @@ bleach uninstall /Applications/App.app -n # Preview app removal
 bleach history                           # Inspect recovery batches
 bleach undo                              # Restore the latest recoverable batch
 bleach empty <batch>                      # Confirm permanent deletion of one batch
+bleach apply plan.json --permanent        # Review and permanently delete the exact selection
+bleach mcp                               # Read-only local MCP server
 ```
 
 Save a preview to review or apply later:
@@ -102,7 +122,7 @@ Saved plans expire after 24 hours. Bleach rechecks file identity, recursive meta
 | Duplicates | Groups equal-length files by full SHA-256. Choose which copy to keep; review the extras before cleanup. |
 | Applications | Reviews a user-owned app and exact bundle-ID matches. Personal data is a separate choice; shared app-group data stays in place. |
 | Recovery | Shares cleanup batches between the CLI and app. Interrupted moves are reconciled from their journal. |
-| System | Shows measured CPU, memory, swap and disk availability. |
+| System | Shows measured CPU/GPU, memory, swap and process footprints, with explicit quit actions. |
 
 Add project folders in **Settings**, or use `bleach config --add-project ~/Projects`. Bleach recognizes `node_modules`, `.build`, `target` and `.next` beside matching manifests. It keeps source files. Exclude a folder with `bleach protect <path>` or the item’s context menu; the exclusion applies to both interfaces.
 
@@ -161,7 +181,7 @@ For a build without installation, run `./scripts/build.sh`. The outputs are `bui
 
 ## Privacy and limits
 
-Bleach uses no network, account, telemetry, privileged helper or background cleaner. Cleanup stays within recognized user-owned locations. Credentials, browser profiles, photo libraries, Codex/T3 session stores, known cloud roots and shared application groups are outside automatic cleanup. Process arguments are inspected only for path references and are never stored or logged. Unreadable targets are skipped with a reason. Grant Full Disk Access in System Settings only if you want to inspect additional protected locations.
+Bleach uses no network, account, telemetry or privileged helper. Optional Auto cleanup runs while Bleach remains open and starts disabled. Cleanup stays within recognized user-owned locations. Credentials, browser profiles, photo libraries, Codex/T3 session stores, known cloud roots and shared application groups are outside automatic cleanup. Process arguments are inspected only for path references and are never stored or logged. Unreadable targets are skipped with a reason. Grant Full Disk Access in System Settings only if you want to inspect additional protected locations.
 
 Recovery uses same-volume moves; cross-volume cleanup is refused. Available space may differ from allocated bytes because APFS clones, snapshots, hard links and other apps can share or change disk allocation. A running owner can start after its last check; the recovery journal reduces consequences but does not lock third-party applications.
 

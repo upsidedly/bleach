@@ -113,6 +113,17 @@ def main():
         assert 0 <= status["diskAvailable"] <= status["diskTotal"]
         assert status["uptime"] > 0
         checked.append("live macOS metrics are bounded and valid JSON")
+        protected_history = root / ".codex/sessions/fixture.jsonl"
+        history_digest = hashlib.sha256(protected_history.read_bytes()).hexdigest()
+        dry = run("clean", "--select", str(stale), "--permanent", "--dry-run", "--json")
+        assert len(dry["candidates"]) == 1 and stale.is_dir()
+        run("clean", "--select", str(stale), "--permanent", status=1, parse=False)
+        assert stale.is_dir()
+        erased = run("clean", "--select", str(stale), "--permanent", "--yes", "--json")
+        assert len(erased["items"]) == 1 and erased["items"][0]["state"] == "erased"
+        assert not stale.exists() and (root / "Library/Caches/com.figma.Desktop/data.bin").is_file()
+        assert hashlib.sha256(protected_history.read_bytes()).hexdigest() == history_digest
+        checked.append("explicit permanent deletion: dry run, confirmation refusal, exact selection and protected history")
         print(json.dumps({"result": "PASS", "checks": checked, "count": len(checked)}, indent=2))
     finally:
         shutil.rmtree(root)

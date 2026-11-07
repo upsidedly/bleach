@@ -7,9 +7,9 @@ struct Arguments {
     var flags: Set<String> = []
     var values: [String: [String]] = [:]
 
-    static let commands = ["scan", "discover", "inactive", "growth", "share", "clean", "apply", "analyze", "duplicates", "apps", "uninstall", "history", "undo", "empty", "protect", "config", "status", "completion"]
+    static let commands = ["mcp", "scan", "discover", "inactive", "growth", "share", "clean", "apply", "analyze", "duplicates", "apps", "uninstall", "history", "undo", "empty", "protect", "config", "status", "completion"]
     private static let valueOptions: Set<String> = ["root", "state", "output", "select", "projects", "category", "min-size", "limit", "keep", "add-project", "remove-project", "age-days"]
-    private static let switches: Set<String> = ["json", "yes", "dry-run", "no-color", "help", "version", "licenses", "all", "with-data", "watch", "remove", "record"]
+    private static let switches: Set<String> = ["json", "yes", "dry-run", "no-color", "help", "version", "licenses", "all", "with-data", "watch", "remove", "record", "allow-mutations", "allow-permanent-delete", "permanent"]
     private static let aliases = ["-h": "--help", "-v": "--version", "-n": "--dry-run", "-y": "--yes", "-j": "--json"]
 
     init(_ input: [String]) throws {
@@ -43,13 +43,13 @@ struct Arguments {
         guard command.isEmpty || Self.commands.contains(command) else { throw BleachError("Unknown command '\(Display.terminalSafe(command))'. Use bleach --help.") }
         let common: Set<String> = ["root", "state", "json", "no-color", "help", "version", "licenses"]
         let allowed: [String: Set<String>] = [
-            "": [], "scan": ["projects", "category", "output"], "discover": ["output"], "inactive": ["output"],
+            "mcp": ["allow-mutations", "allow-permanent-delete"], "": [], "scan": ["projects", "category", "output"], "discover": ["output"], "inactive": ["output"],
             "growth": ["record"],
             "share": ["select", "yes", "dry-run"],
-            "clean": ["projects", "category", "select", "all", "yes", "dry-run"],
-            "apply": ["select", "all", "yes", "dry-run"],
+            "clean": ["projects", "category", "select", "all", "yes", "dry-run", "permanent"],
+            "apply": ["select", "all", "yes", "dry-run", "permanent"],
             "analyze": ["limit"], "duplicates": ["output", "min-size", "keep"],
-            "apps": [], "uninstall": ["output", "yes", "dry-run", "with-data"],
+            "apps": [], "uninstall": ["output", "yes", "dry-run", "with-data", "permanent"],
             "history": [], "undo": ["yes"], "empty": ["yes", "dry-run"],
             "protect": ["remove"], "config": ["add-project", "remove-project", "age-days"],
             "status": ["watch"], "completion": []

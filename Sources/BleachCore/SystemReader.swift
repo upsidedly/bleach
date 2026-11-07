@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import IOKit
 
 public enum RunningApplications {
     @MainActor public static func snapshot() -> [RunningOwner] {
@@ -12,6 +13,29 @@ public enum RunningApplications {
 }
 
 public enum SystemReader {
+    /// Driver-reported whole-GPU utilization; keys vary by driver. Absence is
+    /// unavailable, never an invented zero. No privileged IOReport/private API.
+    private static func gpuReading() -> (percent: Double?, allocated: Int64?, inUse: Int64?) {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else { return (nil, nil, nil) }
+        defer { IOObjectRelease(iterator) }
+        var samples: [Double] = []
+        var allocated: [Int64] = [], inUse: [Int64] = []
+        for _ in 0..<16 {
+            let service = IOIteratorNext(iterator)
+            guard service != 0 else { break }
+            defer { IOObjectRelease(service) }
+            if let value = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? [String: Any] {
+                if let number = value["Device Utilization %"] as? NSNumber {
+                    let percent = number.doubleValue
+                    if percent.isFinite && (0...100).contains(percent) { samples.append(percent) }
+                }
+                if let number = value["Alloc system memory"] as? NSNumber, number.int64Value >= 0 { allocated.append(number.int64Value) }
+                if let number = value["In use system memory"] as? NSNumber, number.int64Value >= 0 { inUse.append(number.int64Value) }
+            }
+        }
+        return (samples.max(), allocated.max(), inUse.max())
+    }
     public static func disk(at url: URL) -> (total: Int64, available: Int64) {
         var values = statvfs()
         guard statvfs(url.path, &values) == 0 else { return (-1, -1) }
@@ -60,10 +84,11 @@ public enum SystemReader {
         var length = MemoryLayout<xsw_usage>.size
         let swapOK = sysctlbyname("vm.swapusage", &swap, &length, nil, 0) == 0
         let disk = disk(at: url)
+        let gpu = gpuReading()
         return SystemSnapshot(sampledAt: Date(), volumePath: url.path, diskTotal: disk.total, diskAvailable: disk.available,
             memoryTotal: total, memoryUsed: total - min(total, reclaimable),
             memoryCompressed: UInt64(info.compressor_page_count) * UInt64(pageSize), swapUsed: swapOK ? swap.xsu_used : nil,
-            cpuPercent: cpu, processorCount: ProcessInfo.processInfo.processorCount,
+            cpuPercent: cpu, gpuPercent: gpu.percent, gpuMemoryAllocated: gpu.allocated, gpuMemoryInUse: gpu.inUse, processorCount: ProcessInfo.processInfo.processorCount,
             uptime: ProcessInfo.processInfo.systemUptime, hostname: ProcessInfo.processInfo.hostName)
     }
 }

@@ -94,74 +94,6 @@ struct CPUPoint: Identifiable {
     let value: Double
 }
 
-struct SystemView: View {
-    @Bindable var model: AppModel
-    @State private var samples: [CPUPoint] = []
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 30) {
-                if let sample = model.system {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(sample.hostname).font(.title2.weight(.semibold))
-                        Spacer()
-                        Text("Up \(Int(sample.uptime / 3600))h").font(.caption).foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 17) {
-                        metric("CPU", value: sample.cpuPercent.map { String(format: "%.1f%%", $0) } ?? "Unavailable",
-                               detail: "Across \(sample.processorCount) cores")
-                        if samples.count > 1 {
-                            Chart(samples) { point in
-                                AreaMark(x: .value("Time", point.date), y: .value("CPU", point.value))
-                                    .foregroundStyle(.primary.opacity(0.045))
-                                LineMark(x: .value("Time", point.date), y: .value("CPU", point.value))
-                                    .foregroundStyle(.secondary).lineStyle(StrokeStyle(lineWidth: 1.5))
-                            }.chartYScale(domain: 0...100).chartXAxis(.hidden)
-                                .chartYAxis { AxisMarks(values: [0, 50, 100]) { AxisGridLine().foregroundStyle(.quaternary); AxisValueLabel() } }
-                                .frame(height: 120)
-                                .accessibilityLabel("Recent CPU utilization")
-                        } else {
-                            Text("Collecting CPU samples…").font(.caption).foregroundStyle(.secondary).frame(height: 120)
-                        }
-                    }
-                    Divider()
-                    VStack(alignment: .leading, spacing: 15) {
-                        metric("Memory in use", value: Display.bytes(Int64(sample.memoryUsed)), detail: "of \(Display.bytes(Int64(sample.memoryTotal)))")
-                        ProgressView(value: Double(sample.memoryUsed), total: Double(sample.memoryTotal)).tint(.secondary).accessibilityLabel("Memory utilization")
-                        HStack {
-                            Text("\(Display.bytes(Int64(sample.memoryCompressed))) compressed")
-                            Spacer()
-                            Text(sample.swapUsed.map { "\(Display.bytes(Int64($0))) swap" } ?? "Swap unavailable")
-                        }.font(.caption).foregroundStyle(.secondary)
-                    }
-                    Divider()
-                    VStack(alignment: .leading, spacing: 15) {
-                        metric("Disk available", value: sample.diskAvailable < 0 ? "Unavailable" : Display.bytes(sample.diskAvailable), detail: sample.diskTotal < 0 ? "" : "of \(Display.bytes(sample.diskTotal))")
-                        if sample.diskTotal > 0 { ProgressView(value: Double(sample.diskTotal - sample.diskAvailable), total: Double(sample.diskTotal)).tint(.secondary).accessibilityLabel("Disk utilization") }
-                        Text("Recovery has \(Display.bytes(model.recoverableBytes)) of attributed allocation. Shared blocks and other apps can affect available space.").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Text("Measured locally from macOS. No health score, memory purge or background optimizer.").font(.caption).foregroundStyle(.secondary)
-                } else { ProgressView("Reading system statistics…") }
-            }.padding(30).frame(maxWidth: 800, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
-        }.task {
-            while !Task.isCancelled {
-                await model.sampleSystem()
-                if Task.isCancelled || model.errorMessage != nil { return }
-                if let value = model.system?.cpuPercent { samples.append(CPUPoint(date: Date(), value: value)) }
-                if samples.count > 40 { samples.removeFirst() }
-                do { try await Task.sleep(for: .seconds(2)) } catch { return }
-            }
-        }
-    }
-    private func metric(_ name: String, value: String, detail: String) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(name).font(.subheadline.weight(.medium))
-            Spacer()
-            Text(value).font(.title2.weight(.medium)).monospacedDigit()
-            if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
-        }
-    }
-}
-
 struct SettingsView: View {
     @Bindable var model: AppModel
     @State private var excludedSelection: String?
@@ -176,6 +108,8 @@ struct SettingsView: View {
                 Text("Rebuildable caches start selected, including recent caches. Known running app caches stay unselected. Recent logs, build artifacts and installers wait for your choice.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            AutomaticSettingsView(model: model)
+            MCPSettingsView()
             Section("Project folders") {
                 Text("Include generated dependencies and build output beside matching project manifests.").font(.caption).foregroundStyle(.secondary)
                 List(model.preferences.projectRoots, id: \.self, selection: $projectSelection) { path in
@@ -207,8 +141,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Text("Bleach works locally. No accounts, uploads, analytics or automatic deletion.").font(.caption).foregroundStyle(.secondary)
+                Text("Bleach works locally. No accounts, uploads or analytics. Automatic permanent deletion requires your explicit opt-in.").font(.caption).foregroundStyle(.secondary)
             }
-        }.formStyle(.grouped).padding(10).frame(width: 530, height: 650).disabled(model.isBusy)
+        }.formStyle(.grouped).padding(10).frame(width: 580, height: 760).disabled(model.isBusy)
     }
 }

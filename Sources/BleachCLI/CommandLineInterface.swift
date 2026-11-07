@@ -1,5 +1,6 @@
 import AppKit
 import BleachCore
+import BleachMCP
 import Darwin
 import Foundation
 
@@ -25,6 +26,9 @@ enum CommandLineInterface {
             }
             if command.isEmpty { print(help); return }
             switch command {
+            case "mcp":
+                guard !arguments.has("allow-permanent-delete") || arguments.has("allow-mutations") else { throw BleachError("--allow-permanent-delete also requires --allow-mutations") }
+                try await BleachMCPServer.run(home: home, state: state, allowMutations: arguments.has("allow-mutations"), allowPermanentDelete: arguments.has("allow-permanent-delete"))
             case "scan", "clean":
                 if !arguments.has("json") { console.note("Scanning local files…") }
                 var plan = try await engine.scan(context: context, additionalProjectRoots: (arguments.values["projects"] ?? []).map(arguments.url))
@@ -260,10 +264,12 @@ enum CommandLineInterface {
             return
         }
         if !arguments.has("json") { console.plan(chosen, home: context.home) }
-        guard try console.confirm("Move \(chosen.candidates.count) items to recovery? Files stay recoverable until you delete this batch.", yes: arguments.has("yes")) else {
+        let permanent = arguments.has("permanent")
+        let question = permanent ? "Permanently delete \(chosen.candidates.count) reviewed items? This cannot be undone. Existing Recovery batches stay." : "Move \(chosen.candidates.count) items to recovery? Files stay recoverable until you delete this batch."
+        guard try console.confirm(question, yes: arguments.has("yes")) else {
             console.note("Cancelled."); return
         }
-        let receipt = try await engine.apply(chosen, context: context)
+        let receipt = try await (permanent ? engine.deletePermanently(chosen, context: context) : engine.apply(chosen, context: context))
         if arguments.has("json") { try console.json(receipt) } else { console.receipt(receipt) }
         if receipt.problemCount > 0 { exit(2) }
     }
@@ -317,6 +323,7 @@ enum CommandLineInterface {
       bleach protect --remove <path>   Remove an exclusion
       bleach config                    Read preferences as JSON
       bleach status [--watch]          Read real CPU, memory and disk statistics
+      bleach mcp                       Local MCP server over stdio (read only)
       bleach completion [zsh|bash|fish] Print shell completion
 
     EXACT PREVIEWS
@@ -334,6 +341,9 @@ enum CommandLineInterface {
       --category <name>                Restrict scan/clean to a category
       --with-data                      Include exact app-data matches when uninstalling
       --record                         Save a complete growth baseline (at most 8 folders)
+      --permanent                      Delete reviewed clean/apply/uninstall items irreversibly
+      --allow-mutations                MCP: expose move-to-Recovery and restore tools
+      --allow-permanent-delete         MCP: also expose irreversible selected-item deletion
       --keep <path>                    Choose the retained copy in a duplicate group
       --output <file>                  Export a plan from scan, duplicates or uninstall
       --root <home>                    Inspect a different user home (also for fixtures)

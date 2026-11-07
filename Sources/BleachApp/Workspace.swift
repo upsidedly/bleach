@@ -5,6 +5,8 @@ import SwiftUI
 struct Workspace: View {
     @Bindable var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         NavigationSplitView {
@@ -55,7 +57,12 @@ struct Workspace: View {
         .tint(Color.primary)
         .accentColor(Color(nsColor: .labelColor))
         .frame(minWidth: 880, minHeight: 580)
-        .task { await model.load() }
+        .task {
+            if model.menuBar == nil {
+                model.menuBar = MenuBarController(model: model, openMain: { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }, openSettings: { openSettings() })
+            }
+            await model.load()
+        }
         .onChange(of: model.destination) { _, destination in
             model.search = ""
             switch destination ?? .clean {
@@ -64,7 +71,12 @@ struct Workspace: View {
             default: break
             }
         }
-        .sheet(item: $model.review) { preview in ReviewSheet(model: model, plan: preview).tint(.primary).accentColor(Color(nsColor: .labelColor)) }
+        .sheet(item: Binding(get: { model.reviewFromMenu ? nil : model.review }, set: { model.review = $0 })) { preview in ReviewSheet(model: model, plan: preview).tint(.primary).accentColor(Color(nsColor: .labelColor)) }
+        .sheet(isPresented: $model.showCommands) { CommandPalette(model: model) }
+        .confirmationDialog("Force quit \(model.quitRequest?.name ?? "this app")?", isPresented: Binding(get: { model.quitRequest != nil }, set: { if !$0 { model.quitRequest = nil } }), titleVisibility: .visible) {
+            if let process = model.quitRequest { Button("Force Quit", role: .destructive) { model.quit(process, force: true) } }
+            Button("Cancel", role: .cancel) { model.quitRequest = nil }
+        } message: { Text("Unsaved changes can be lost. Try a normal quit first.") }
         .sheet(item: $model.sharingRequest) { preview in SharingReviewSheet(model: model, plan: preview).tint(.primary).accentColor(Color(nsColor: .labelColor)) }
         .alert("Couldn’t finish", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             Button("OK") { model.errorMessage = nil }
@@ -107,13 +119,12 @@ struct Workspace: View {
                 }
             }.listStyle(.sidebar).listItemTint(.primary)
             Spacer(minLength: 8)
+            Button { model.showCommands = true } label: { Label("Actions", systemImage: "command").frame(maxWidth: .infinity, alignment: .leading) }
+                .buttonStyle(.plain).font(.subheadline).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 17)
             if let system = model.system, system.diskTotal > 0 {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.fixtureMode ? "Fixture home" : "Storage").font(.subheadline.weight(.medium))
-                    ProgressView(value: Double(system.diskTotal - system.diskAvailable), total: Double(system.diskTotal))
-                        .tint(.secondary)
-                        .accessibilityLabel("Disk space used")
-                    Text("\(Display.bytes(system.diskAvailable)) available").font(.caption).foregroundStyle(.secondary)
+                    DiskSpaceMeter(total: system.diskTotal, available: system.diskAvailable, compact: true)
                 }.padding(.horizontal, 20).padding(.bottom, 19)
             }
             HStack {
@@ -156,19 +167,34 @@ struct EmptyState<Actions: View>: View {
 struct SelectionBar: View {
     @Bindable var model: AppModel
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(model.selectedCandidates.count) selected · \(Display.bytes(model.selectedBytes)) private")
-                    .help(StorageUsage.explanation)
-                    .font(.subheadline.weight(.medium)).monospacedDigit()
-                Text("Recoverable until you delete the batch.").font(.caption).foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                selectionInfo.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 8)
+                actions.fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: 8)
+            VStack(alignment: .leading, spacing: 12) {
+                selectionInfo
+                HStack { Spacer(minLength: 0); actions }
+            }
+        }.padding(.horizontal, 23).padding(.vertical, 15).background(.bar)
+    }
+    private var selectionInfo: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("\(model.selectedCandidates.count) selected · \(Display.bytes(model.selectedBytes)) private")
+                .help(StorageUsage.explanation).font(.subheadline.weight(.medium)).monospacedDigit()
+            Text("Choose Recovery for Undo, or delete permanently.").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    private var actions: some View {
+        HStack(spacing: 12) {
+            Button("Delete Permanently…", role: .destructive) { model.showReview(permanently: true) }
+                .disabled(model.selectedCandidates.isEmpty || model.isBusy)
             Button { model.showReview() } label: { PrimaryButtonLabel(title: "Review Cleanup…") }
                 .buttonStyle(.borderedProminent).controlSize(.large)
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(model.selectedCandidates.isEmpty || model.isBusy)
-        }.padding(.horizontal, 23).padding(.vertical, 15).background(.bar)
+        }
     }
 }
 

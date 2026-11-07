@@ -49,6 +49,15 @@ struct BleachMark: Shape {
 }
 
 enum BleachIcon {
+    @MainActor static func menuBarImage() -> NSImage {
+        let image = NSImage(size: CGSize(width: 18, height: 18), flipped: false) { bounds in
+            drawMark(in: bounds, color: .black)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Bleach"
+        return image
+    }
     @MainActor static func drawMark(in rect: CGRect, color: NSColor) {
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }

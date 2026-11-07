@@ -7,6 +7,13 @@ struct CleanupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let message = model.statusMessage {
+                HStack {
+                    Text(message).font(.caption)
+                    Spacer()
+                    Button { model.statusMessage = nil } label: { Label("Dismiss", systemImage: "xmark").labelStyle(.iconOnly) }.buttonStyle(.plain)
+                }.padding(.horizontal, 23).padding(.vertical, 10).background(.quaternary.opacity(0.4))
+            }
             if let batch = model.lastBatch, batch.movedCount > 0 {
                 HStack(spacing: 10) {
                     Image(systemName: "checkmark.circle").accessibilityHidden(true)
@@ -26,6 +33,9 @@ struct CleanupView: View {
                     issuesButton(plan)
                 } else {
                     VStack(alignment: .leading, spacing: 17) {
+                        if let system = model.system {
+                            DiskSpaceMeter(total: system.diskTotal, available: system.diskAvailable)
+                        }
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
                             Text(Display.bytes(model.selectedBytes)).font(.largeTitle.weight(.semibold)).monospacedDigit()
                             VStack(alignment: .leading, spacing: 3) {
@@ -61,8 +71,14 @@ struct CleanupView: View {
                                 .accessibilityLabel("Filter category").help(model.category?.title ?? "Filter category")
                         }
                         HStack {
-                            Button("Select Suggested") { model.selectedPaths = Set(plan.suggested.map(\.path)) }.buttonStyle(.borderless)
-                            if !model.selectedPaths.isEmpty { Button("Clear") { model.selectedPaths = [] }.buttonStyle(.borderless).foregroundStyle(.secondary) }
+                            Menu {
+                                ForEach([CleanupLevel.light, .balanced, .thorough], id: \.self) { level in
+                                    Button(level.rawValue) { model.selectLevel(level) }.help(level.detail)
+                                }
+                            } label: { Label(model.cleanupLevel.rawValue, systemImage: "slider.horizontal.3") }
+                                .help(model.cleanupLevel.detail)
+                            Toggle("Group by Kind", isOn: $model.groupCleanup).toggleStyle(.button).buttonStyle(.borderless)
+                            if !model.selectedPaths.isEmpty { Button("Clear") { model.selectedPaths = []; model.cleanupLevel = .custom }.buttonStyle(.borderless).foregroundStyle(.secondary) }
                             Spacer()
                             moreSpace
                                 .buttonStyle(.borderless).disabled(model.isBusy)
@@ -71,7 +87,10 @@ struct CleanupView: View {
                             issuesButton(plan)
                         }.font(.caption)
                     }.padding(.horizontal, 24).padding(.top, 24).padding(.bottom, 15)
-                    CandidateTable(model: model, candidates: model.visibleCandidates)
+                    Group {
+                        if model.groupCleanup { GroupedCleanupList(model: model, candidates: model.visibleCandidates) }
+                        else { CandidateTable(model: model, candidates: model.visibleCandidates) }
+                    }
                         .overlay {
                             if model.visibleCandidates.isEmpty { ContentUnavailableView.search(text: model.search) }
                         }
@@ -80,7 +99,7 @@ struct CleanupView: View {
                 }
             } else {
                 EmptyState(symbol: "sparkles", title: "A little more room.",
-                    message: "Find old caches, logs, installers and build artifacts. Review each item, then keep a way back.") {
+                    message: "Find old caches, logs, installers and build artifacts. Review each item before choosing how to remove it.") {
                     VStack(spacing: 14) {
                         Button { model.scan() } label: { PrimaryButtonLabel(title: "Scan Your Mac") }
                             .buttonStyle(.borderedProminent).controlSize(.large)
@@ -150,9 +169,12 @@ struct CandidateTable: View {
                     .help(candidate.blockedReason ?? "Include in cleanup")
             }.width(26)
             TableColumn("Item", value: \.title) { candidate in
-                VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 10) {
+                    CleanupKindIcon(kind: candidate.kind)
+                    VStack(alignment: .leading, spacing: 3) {
                     Text(candidate.title).font(.subheadline.weight(.medium)).lineLimit(1)
-                    Text(candidate.category.title + " · " + candidate.recommendation.label).font(.caption).foregroundStyle(.secondary)
+                    Text(candidate.kind.title + " · " + candidate.recommendation.label).font(.caption).foregroundStyle(.secondary)
+                    }
                 }.padding(.vertical, 7)
                     .contextMenu {
                         Button("Reveal in Finder", systemImage: "folder") { model.reveal(candidate.path) }
@@ -176,7 +198,7 @@ struct CandidateInspector: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 23) {
                     VStack(alignment: .leading, spacing: 12) {
-                        Image(systemName: candidate.category.symbol).font(.system(size: 27, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
+                        CleanupKindIcon(kind: candidate.kind, size: 27)
                         Text(candidate.title).font(.title3.weight(.semibold)).textSelection(.enabled)
                         Text(Display.path(candidate.path, home: model.home)).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled).lineLimit(nil)
                     }
@@ -228,19 +250,21 @@ struct CandidateInspector: View {
 struct ReviewSheet: View {
     @Bindable var model: AppModel
     let plan: CleanupPlan
+    @State private var confirmPermanent = false
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 13) {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Move to recovery").font(.title2.weight(.semibold))
+                    Text(model.reviewPermanently ? "Delete selected files" : "Review cleanup").font(.title2.weight(.semibold))
                     Text("\(Display.items(plan.candidates.count)) · \(Display.bytes(plan.storage.privateBytes)) private · \(Display.bytes(plan.totalBytes)) allocated").font(.subheadline).foregroundStyle(.secondary)
                 }
             }
             Text("These files will leave their current locations. Restore them from Recovery, or permanently delete the batch there. Moving files to recovery frees no space; shared blocks can remain after deletion.")
                 .font(.body).foregroundStyle(.secondary)
             List(plan.candidates) { candidate in
-                HStack {
+                HStack(spacing: 10) {
+                    CleanupKindIcon(kind: candidate.kind, size: 16)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(candidate.title).font(.subheadline.weight(.medium))
                         Text(Display.path(candidate.path, home: model.home)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -252,12 +276,17 @@ struct ReviewSheet: View {
             Text("Bleach checks these files again before moving them. If an app recreates a path, restore keeps both copies and asks you to resolve it.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Spacer()
                 Button("Cancel", role: .cancel) { model.review = nil }.keyboardShortcut(.escape, modifiers: [])
+                Spacer()
+                Button("Delete Permanently…", role: .destructive) { confirmPermanent = true }
                 Button { model.applyReview() } label: { PrimaryButtonLabel(title: "Move to Recovery") }
                     .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("confirm-move")
             }
         }.padding(26).frame(width: 520)
+            .confirmationDialog("Permanently delete \(Display.items(plan.candidates.count))?", isPresented: $confirmPermanent, titleVisibility: .visible) {
+                Button("Delete Permanently", role: .destructive) { model.applyReview(permanently: true) }
+                Button("Cancel", role: .cancel) {}
+            } message: { Text("This erases only the files listed in this review. It cannot be undone. Existing Recovery batches stay. Shared blocks can remain after deletion.") }
     }
 }

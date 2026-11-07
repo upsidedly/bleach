@@ -11,7 +11,7 @@ struct PreferencesStore {
         do {
             let data = try Files.readPrivateFile(url, limit: 1_000_000)
             var preferences = try JSONCoding.decoder().decode(Preferences.self, from: data)
-            guard preferences.schemaVersion == 1, (1...3650).contains(preferences.minimumAgeDays),
+            guard preferences.schemaVersion == 1, (1...3650).contains(preferences.minimumAgeDays), preferences.automaticCleanup?.valid != false,
                   preferences.excludedPaths.allSatisfy({ $0.hasPrefix("/") && Files.lexicalPath($0) == $0 }),
                   preferences.projectRoots.allSatisfy({ Files.pathIsWithin($0, context.home.path) }) else {
                 throw BleachError("Invalid preferences; cleanup stopped")
@@ -129,7 +129,7 @@ extension BleachEngine {
 
     public func updatePreferences(_ preferences: Preferences, context: ScanContext) throws {
         guard geteuid() != 0 else { throw BleachError("Run Bleach as your normal user, without sudo.") }
-        guard (30...3650).contains(preferences.minimumAgeDays), preferences.schemaVersion == 1,
+        guard (30...3650).contains(preferences.minimumAgeDays), preferences.schemaVersion == 1, preferences.automaticCleanup?.valid != false,
               preferences.excludedPaths.allSatisfy({ $0.hasPrefix("/") && Files.lexicalPath($0) == $0 }),
               preferences.projectRoots.allSatisfy({ Files.pathIsWithin($0, context.home.path) }) else {
             throw BleachError("Invalid preferences")

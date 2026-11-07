@@ -11,7 +11,7 @@ Version 0.3.0 adds inactive-project review, custom Swift/Next output detection, 
 | `BleachCLI` | Argument validation, terminal review, JSON, explicit scripting confirmation and output escaping. |
 | `BleachApp` | Observation model, SwiftUI windows, tables, inspector, commands, Settings and original icon geometry. |
 
-No third-party runtime dependencies or Mole source are bundled. The app binary is named `BleachApp`; the CLI is `bleach`. Names differing only by case collide on standard macOS volumes.
+ZIPFoundation serves archive verification. The CLI links the official MCP Swift SDK; the native GUI does not. All bundled notices are in THIRD-PARTY-NOTICES.md. No Mole source is bundled. The app binary is named `BleachApp`; the CLI is `bleach`. Names differing only by case collide on standard macOS volumes.
 
 ## Build and tests
 
@@ -95,3 +95,13 @@ Project processing caches start unchecked and require an idle owning project at 
 Run `python3 scripts/verify-storage-workflows.py --binary build/bleach` for the additional CLI canary. Positive inactivity fixtures use the injected clock because ctime cannot be backdated. Mutation tests use disposable homes only.
 
 Prominent native buttons use `PrimaryButtonLabel` to resolve contrasting text from the SwiftUI appearance while retaining native styles, roles and shortcuts. macOS bezel tint does not also tint the label; verify enabled/disabled labels in both appearances.
+
+## Native dashboard and automation (0.5)
+
+`CleanupSelection` owns named presets and storage kinds. Thorough does not select dependency folders or personal data. Coloured SF Symbols share one kind mapping across grouped lists, tables, inspectors and menu bar. The segmented meter uses measured volume capacity/available bytes and keeps private cleanup estimates separate.
+
+`ProcessMonitor` samples up to 8192 user-owned processes through libproc, retaining only PID and start identity, display name, footprint and CPU deltas. 100% CPU is one core. Actions recheck identity/ownership and target regular apps; Bleach and desktop/system UI stay protected. Fixture mode refuses to quit apps outside its home. GPU comes from optional IOAccelerator driver data; no per-process GPU number or memory-purge claim is synthesized. References: [Apple resource counters](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h), [NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication).
+
+`AutomaticCleanupSettings` is optional in schema 1 preferences; old files decode to disabled. Invalid configurations fail closed. Auto uses a narrow raw-download/log scan, no project traversal, suggested/private-only candidates, current exclusions and visible reference/owner checks. Logs require 90 days without modification. At most32 items / 8 GB enter each pass. The app owns one 60-second loop and no login helper. Enabling requires a product confirmation; this task never enables it on the real home.
+
+Direct deletion shares the existing write-ahead move and verified per-batch erase. It purges only the batch it just created. Failure/interruption leaves durable item states for inspection; existing recovery remains independent. Both frontends support the choice; CLI clean/apply/uninstall use `--permanent`. See [MCP](MCP.md) for agent tool permissions and provenance.
